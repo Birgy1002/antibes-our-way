@@ -73,3 +73,19 @@ In VS Code den Ordner öffnen → `index.html` → Live Server.
 
 ## v0.9 – combinable filters
 Eat & Drink filters are now dimensional: Type (Coffee/Wine/Restaurant), Extras (Outdoor/Rooftop/Aperitif; multi-select), and Area (Antibes/Nice/Around). Explore area filters are simplified to Antibes/Nice/Around.
+
+
+## v1.0 – iPhone Google Maps handoff
+
+- Single-destination Directions uses the documented Google Maps iOS URL scheme on iPhone/iPad (`comgooglemaps://?daddr=...`).
+- Map links no longer open a new browser tab on iOS; this avoids the Safari/PWA handoff that could lose the destination.
+- Multi-stop plan routes keep the cross-platform Google Maps URL because the iOS scheme does not provide the same waypoint URL pattern.
+- All app assets and the service-worker cache are versioned as 1.0.
+
+
+## v1.1 – Antibes wine & restaurant curation
+- Added Jeanne, Entre 2 Vins, DEVINS, La Civette du Marché, Ô Vintage and La Suite Wine Bar.
+- DEVINS is explicitly treated as a caviste / bottle shop; private tastings are group-only by arrangement and are not presented as a normal visitor tasting.
+- Added L’Arazur, Le Comptoir de la Tourraque, La Taille de Guêpe, Le P’tit Cageot, Nananère and Ferni with the curated food/interior assessments.
+- Aperitif is now a true extra filter: wine shops no longer appear automatically just because they are tagged as wine.
+- All app assets and the service-worker cache are versioned as 1.1.
