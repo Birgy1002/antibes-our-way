@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+/* Development safety: Live Server must never keep an old app/service-worker build. */
+(function(){
+  const isDev = ['localhost','127.0.0.1'].includes(location.hostname);
+  if (!isDev) return;
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => Promise.all(regs.map(r => r.unregister()))).catch(()=>{});
+  }
+  if ('caches' in window) {
+    caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('antibes-our-way-')).map(k => caches.delete(k)))).catch(()=>{});
+  }
+})();
+</script>
+<meta name="theme-color" content="#1f5f8b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Antibes Our Way">
+<title>Antibes · Our Way</title>
+<link rel="manifest" href="manifest.webmanifest?v=0.9"><link rel="apple-touch-icon" href="assets/icon-192.png?v=0.9">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="style.css?v=0.9">
+</head>
+<body>
+<div id="app">
+<header class="topbar"><button class="brand" data-view="home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48" role="img"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2d78a8"/><stop offset="100%" stop-color="#1f5f8b"/></linearGradient></defs><rect x="2" y="2" width="44" height="44" rx="14" fill="url(#g1)"/><circle cx="34" cy="14" r="4" fill="#efc76a"/><path d="M10 31.5c4-1.6 7.7-2.3 11.8-2.3 4.5 0 8.6 1.1 15.1 4" fill="none" stroke="#f6f0e3" stroke-width="2.4" stroke-linecap="round"/><path d="M11 27.2c3.2-1 6.3-1.5 9.6-1.5 3.9 0 8 1 14.2 3.4" fill="none" stroke="#f6f0e3" stroke-width="1.8" stroke-linecap="round" opacity=".78"/><path d="M13.5 28.2h8.2M13.5 24.8h8.2M13.5 21.4h8.2" stroke="#ecd7b3" stroke-width="1.8" stroke-linecap="round"/><path d="M12.7 18.4h10.2" stroke="#ecd7b3" stroke-width="2.1" stroke-linecap="round"/><path d="M12.7 18.4l1.2-3.3h7.8l1.2 3.3" fill="none" stroke="#ecd7b3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>ANTIBES</b><small>OUR WAY</small></span></button><button id="themeToggle" class="icon-btn" aria-label="Theme">◐</button></header>
+<main>
+<section id="home" class="view active">
+ <div class="hero"><div class="hero-orb"></div><svg class="hero-sailboat" viewBox="0 0 150 120" aria-hidden="true"><path class="boat-water" d="M8 101c18-6 35-6 52 0s34 6 51 0 25-5 31-2"/><path class="boat-hull" d="M39 88h70l-10 14H51Z"/><path class="boat-mast" d="M71 18v71"/><path class="boat-main" d="M75 24v56h43Z"/><path class="boat-jib" d="M67 34v46H38Z"/></svg><div class="hero-coast"></div><div class="hero-copy"><p class="eyebrow">WORKATION · NOVEMBER 2026</p><h1>Antibes.<br><em>Our way.</em></h1><p>Fast drei Wochen Côte d’Azur: Kunst, Cafés, Küste, Wein und Tage, die sich nicht wie eine Checkliste anfühlen.</p></div></div>
+ <div class="home-grid">
+  <button class="home-card primary" data-view="plans"><span class="home-icon">↝</span><div><small>PLANS</small><b>Pick a day</b><p>14 flexible Tagesideen aus den gespeicherten Orten.</p></div></button>
+  <button class="home-card peyrassol-card" data-open-plan="peyrassol-day"><span class="home-icon wine">🍷</span><div><small>WINE + ART DAY</small><b>Peyrassol</b><p>Ein eigener Tagesausflug für Wein, Skulptur und Landschaft.</p></div></button>
+  <button class="home-card" data-view="food" data-food-filter="Coffee"><span class="home-icon sun">☕</span><div><small>COFFEE</small><b>Worth sitting down for</b><p>Guter Kaffee, Pâtisserie und schöne Außenplätze.</p></div></button>
+  <button class="home-card" data-view="explore"><span class="home-icon coral">⌖</span><div><small>EXPLORE</small><b>Places worth knowing</b><p>Kunst, Architektur, Gärten, Orte und Innovation.</p></div></button>
+  <button class="home-card event-card-home" data-view="events"><span class="home-icon event">✦</span><div><small>EVENT RADAR</small><b>What is on in November?</b><p>Foto, Kunst, Führungen, Innovation, Coworking und besondere Termine.</p></div></button>
+  <button class="home-card" data-view="food" data-food-filter="Aperitif"><span class="home-icon wine">🍷</span><div><small>APERITIF</small><b>One drink before home</b><p>Weinbars und ganzjährige Rooftops.</p></div></button>
+ </div>
+ <section class="panel"><div class="section-head"><div><p class="eyebrow">TIME-SENSITIVE</p><h2>Do these at the right time.</h2></div><span class="count-pill" id="sensitiveCount"></span></div><div id="sensitiveList" class="mini-list"></div></section>
+ <section class="panel soft"><div class="section-head"><div><p class="eyebrow">EVENT RADAR</p><h2>November dates</h2></div><button class="panel-link" data-view="events">See all →</button></div><div id="eventList" class="mini-list"></div></section>
+</section>
+<section id="explore" class="view"><div class="page-head"><div><p class="eyebrow">EXPLORE</p><h1>Places worth knowing</h1></div><span class="big-number" id="exploreCount"></span></div><div class="search-wrap"><input id="exploreSearch" placeholder="Search places, areas, tags…"></div><div class="filter-stack"><div class="filter-row"><span class="filter-label">AREA</span><div class="chip-scroll" id="areaChips"></div></div><div class="filter-row"><span class="filter-label">INTEREST</span><div class="chip-scroll secondary" id="tagChips"></div></div></div><div id="exploreGrid" class="card-grid"></div></section>
+<section id="plans" class="view"><div class="page-head"><div><p class="eyebrow">PLANS</p><h1>Choose a day</h1></div><span class="big-number" id="planCount"></span></div><p class="page-intro">Keine starren Reisepläne. Eher gute Kombinationen, die sich nach Wetter, Lust und Öffnungszeiten verschieben lassen.</p><div id="planGrid" class="plan-grid"></div></section>
+<section id="food" class="view"><div class="page-head"><div><p class="eyebrow">EAT & DRINK</p><h1>Where we'd stop</h1></div><span class="big-number" id="foodCount"></span></div><div class="search-wrap"><input id="foodSearch" placeholder="Search coffee, wine, rooftop…"></div><div class="filter-stack food-filters"><div class="filter-row"><span class="filter-label">TYPE</span><div class="chip-scroll" id="foodTypeChips"></div></div><div class="filter-row"><span class="filter-label">EXTRAS</span><div class="chip-scroll secondary" id="foodExtraChips"></div></div><div class="filter-row"><span class="filter-label">AREA</span><div class="chip-scroll secondary" id="foodAreaChips"></div></div></div><div id="foodGrid" class="card-grid"></div><div class="empty-note">Restaurants sind im Datenmodell vorgesehen, werden aber separat und bewusst klein kuratiert.</div></section>
+<section id="events" class="view"><div class="page-head"><div><p class="eyebrow">EVENT RADAR</p><h1>November, not to miss</h1></div><span class="big-number" id="eventCount"></span></div><p class="page-intro">Kuratiert für unsere Reise: Fotografie, Kunst, Architekturführungen, Innovation, Community und besondere Genuss-/Weintermine. Der Radar wird separat wöchentlich aktualisiert.</p><div class="chip-scroll" id="eventChips"></div><div id="eventGrid" class="event-grid"></div><section class="panel radar-note"><p class="eyebrow">WATCHLIST</p><h2>What the radar checks</h2><p class="lead">Antibes official agenda & guided visits · Nice agenda and L'Automne de l'Image / OVNi · museum and villa special programmes · Maison de l'IA / ALPHA and Sophia agenda · Meetup / Nice Nomads · Eventbrite · French Tech Côte d'Azur · SKEMA / UniCA / ETSI · Monaco / Grimaldi Forum / Villa Paloma · Menton architecture tours · Peyrassol wine & art events.</p></section></section>
+<section id="mapview" class="view"><div class="page-head"><div><p class="eyebrow">MAP</p><h1>Areas at a glance</h1></div><span class="big-number">⌖</span></div><p class="page-intro">v0.9 zeigt bewusst Regionen statt ungesicherter Einzelkoordinaten. Bei jedem Ort führt <b>Directions</b> zur exakten Adresse.</p><div id="map" class="map"></div></section>
+<section id="detail" class="view detail-view"><div class="detail-sticky"><button id="detailBack" class="back-btn">← Back</button><span id="detailContext" class="detail-context"></span></div><div id="detailBody"></div></section>
+</main>
+<nav class="bottom-nav"><button class="nav active" data-view="home"><span>⌂</span><b>Home</b></button><button class="nav" data-view="explore"><span>⌖</span><b>Explore</b></button><button class="nav" data-view="plans"><span>↝</span><b>Plans</b></button><button class="nav" data-view="food"><span>☕</span><b>Eat & Drink</b></button><button class="nav" data-view="mapview"><span>▦</span><b>Map</b></button></nav>
+</div>
+<script src="data/places.js?v=0.9"></script><script src="data/gastro.js?v=0.9"></script><script src="data/plans.js?v=0.9"></script><script src="data/events.js?v=0.9"></script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="app.js?v=0.9"></script>
+</body></html>
