@@ -89,3 +89,26 @@ Eat & Drink filters are now dimensional: Type (Coffee/Wine/Restaurant), Extras (
 - Added L’Arazur, Le Comptoir de la Tourraque, La Taille de Guêpe, Le P’tit Cageot, Nananère and Ferni with the curated food/interior assessments.
 - Aperitif is now a true extra filter: wine shops no longer appear automatically just because they are tagged as wine.
 - All app assets and the service-worker cache are versioned as 1.1.
+
+
+## v1.2 – route overview + more robust Google Maps links
+- Plan detail pages now include a visual route overview map between ‘Why this works’ and the stop list.
+- Google Maps plan links now use universal HTTPS URLs for all devices.
+- Route building deduplicates repeated addresses, excludes descriptive note-only stops, and keeps optional stops out of the forced route.
+- Longer routes are simplified to a mobile-friendly core route for more reliable rendering in Google Maps.
+
+
+## v1.3 – complete plan overview maps
+- Route overview maps now include all mappable plan stops, including optional ones.
+- Marker numbers match the Stop by stop list exactly; optional markers use a lighter style.
+- Stops sharing the same address are combined into one marker with both stop numbers.
+- Geocoding is throttled and retried with a broader place-name fallback for more reliable map rendering.
+- Google Maps route links remain the simplified, mobile-friendly core route from v1.2.
+
+
+## v1.4 – tighter interactive plan maps
+- Plan overview maps use a taller, less panoramic frame so local routes are easier to read.
+- Initial bounds are tighter around the relevant stops.
+- Pinch zoom and dragging are enabled on touch devices; desktop gets +/− zoom controls and drag/double-click zoom.
+- Mouse-wheel zoom remains off so normal page scrolling is not hijacked.
+- Google Maps route-link logic is unchanged.

@@ -14,9 +14,128 @@ $('#detailBack').onclick=()=>{const t=state.returnTarget;if(t?.type==='plan'){op
 window.addEventListener('popstate',()=>showView(location.hash.replace('#','')||'home',false));
 function setReturn(defaultView){if(state.view==='detail'&&state.activeDetail?.type==='plan'){state.returnTarget={type:'plan',id:state.activeDetail.id,scrollY:window.scrollY}}else state.returnTarget={type:'view',view:state.view==='detail'?defaultView:state.view}}
 const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-function directions(address,mode='driving'){const encoded=encodeURIComponent(address);if(isIOS)return `comgooglemaps://?daddr=${encoded}&directionsmode=${mode}`;return `https://www.google.com/maps/dir/?api=1&destination=${encoded}&travelmode=${mode}`}
+let detailPlanMap=null;
+function routeMode(plan){return plan.mode==='walking'?'walking':plan.mode==='transit'?'transit':'driving'}
+function googleDirectionsUrl({origin='',destination='',waypoints=[],mode='driving'}){
+  const params=[`api=1`];
+  if(origin)params.push(`origin=${encodeURIComponent(origin)}`);
+  if(destination)params.push(`destination=${encodeURIComponent(destination)}`);
+  if(waypoints?.length)params.push(`waypoints=${encodeURIComponent(waypoints.join('|'))}`);
+  if(mode)params.push(`travelmode=${encodeURIComponent(mode)}`);
+  return `https://www.google.com/maps/dir/?${params.join('&')}`;
+}
+function directions(address,mode='driving'){return googleDirectionsUrl({destination:address,mode})}
 function mapLinkAttrs(){return isIOS?'':'target="_blank" rel="noopener"'}
-function planDirections(plan){const stops=plan.stops.map(s=>s.place?pMap[s.place]?.address:s.food?gMap[s.food]?.address:s.address).filter(Boolean);if(stops.length<2)return stops[0]?directions(stops[0],plan.mode==='walking'?'walking':plan.mode==='transit'?'transit':'driving'):'#';const origin=stops[0],destination=stops[stops.length-1],ways=stops.slice(1,-1).join('|');const mode=plan.mode==='walking'?'walking':plan.mode==='transit'?'transit':'driving';return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${ways?`&waypoints=${encodeURIComponent(ways)}`:''}&travelmode=${mode}`}
+function stopAddress(stop){return stop.place?pMap[stop.place]?.address:stop.food?gMap[stop.food]?.address:stop.address||''}
+function routeCandidates(plan,{includeOptional=false}={}){
+  const seen=new Set();
+  return plan.stops.map((stop,idx)=>({stop,idx,address:stopAddress(stop)}))
+    .filter(x=>x.address && (includeOptional || !x.stop.optional))
+    .filter(x=>{const key=x.address.trim().toLowerCase();if(seen.has(key))return false;seen.add(key);return true;})
+    .map(x=>({index:x.idx,address:x.address,title:stopData(x.stop)?.title||`Stop ${x.idx+1}`,optional:!!x.stop.optional}));
+}
+function compressRoutePoints(points,maxPoints=5){
+  if(points.length<=maxPoints)return points;
+  if(maxPoints<=2)return [points[0],points[points.length-1]];
+  const res=[points[0]];
+  const interior=points.slice(1,-1);
+  const slots=maxPoints-2;
+  for(let i=0;i<slots;i++){
+    const idx=Math.round((i+1)*(interior.length+1)/(slots+1))-1;
+    const pick=interior[Math.max(0,Math.min(interior.length-1,idx))];
+    if(pick && !res.includes(pick))res.push(pick);
+  }
+  res.push(points[points.length-1]);
+  return res;
+}
+function planOverviewPoints(plan){
+  return plan.stops.map((stop,idx)=>({
+    index:idx,
+    address:stopAddress(stop),
+    title:stopData(stop)?.title||`Stop ${idx+1}`,
+    optional:!!stop.optional,
+    type:stopData(stop)?.type||'note'
+  })).filter(x=>x.address);
+}
+function planCoreRoutePoints(plan){
+  let points=routeCandidates(plan,{includeOptional:false});
+  if(points.length<2)points=routeCandidates(plan,{includeOptional:true});
+  return points;
+}
+function planDirections(plan){
+  const mode=routeMode(plan);
+  const points=compressRoutePoints(planCoreRoutePoints(plan),5);
+  if(points.length<2)return points[0]?directions(points[0].address,mode):'#';
+  return googleDirectionsUrl({origin:points[0].address,destination:points[points.length-1].address,waypoints:points.slice(1,-1).map(x=>x.address),mode});
+}
+let geocodeLastRequest=0;
+function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+async function geocodeFetch(query){
+  const wait=Math.max(0,1050-(Date.now()-geocodeLastRequest));
+  if(wait)await sleep(wait);
+  geocodeLastRequest=Date.now();
+  const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=fr&q=${encodeURIComponent(query)}`;
+  const res=await fetch(url,{headers:{'Accept-Language':'en'}});
+  if(!res.ok)return null;
+  const json=await res.json();
+  if(!json?.[0])return null;
+  return [parseFloat(json[0].lat),parseFloat(json[0].lon)];
+}
+async function geocodeAddress(address,title=''){
+  const key=`antibes-geocode-v2-${address}`;
+  try{const cached=localStorage.getItem(key);if(cached)return JSON.parse(cached)}catch(e){}
+  try{
+    let coords=await geocodeFetch(address);
+    if(!coords && title)coords=await geocodeFetch(`${title}, Côte d'Azur, France`);
+    if(!coords)return null;
+    try{localStorage.setItem(key,JSON.stringify(coords))}catch(e){}
+    return coords;
+  }catch(err){return null}
+}
+function markerGroupKey(point){return point.address.trim().toLowerCase()}
+async function renderPlanOverviewMap(plan){
+  const el=$('#planOverviewMap');
+  if(!el||typeof L==='undefined')return;
+  if(detailPlanMap){detailPlanMap.remove();detailPlanMap=null}
+  el.innerHTML='<div class="plan-map-loading">Loading map overview…</div>';
+  const points=planOverviewPoints(plan);
+  const coords=[];
+  for(const point of points){
+    const latlng=await geocodeAddress(point.address,point.title);
+    if(latlng)coords.push({...point,latlng});
+  }
+  if(coords.length===0){el.innerHTML='<div class="plan-map-fallback">Map preview unavailable for this plan.</div>';return}
+  el.innerHTML='';
+  detailPlanMap=L.map(el,{zoomControl:true,dragging:true,scrollWheelZoom:false,doubleClickZoom:true,boxZoom:false,keyboard:false,tap:true,touchZoom:true,attributionControl:false});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(detailPlanMap);
+  const grouped=[];
+  const byAddress=new Map();
+  coords.forEach(point=>{
+    const key=markerGroupKey(point);
+    if(!byAddress.has(key)){const group={...point,points:[point]};byAddress.set(key,group);grouped.push(group)}
+    else byAddress.get(key).points.push(point);
+  });
+  grouped.forEach(group=>{
+    const nums=group.points.map(p=>p.index+1).join('/');
+    const allOptional=group.points.every(p=>p.optional);
+    const titles=group.points.map(p=>`${p.index+1}. ${p.title}${p.optional?' (optional)':''}`).join('<br>');
+    const icon=L.divIcon({className:'',html:`<div class="plan-marker ${allOptional?'optional':''}">${nums}</div>`,iconSize:[34,34],iconAnchor:[17,17]});
+    L.marker(group.latlng,{icon}).addTo(detailPlanMap).bindTooltip(titles,{permanent:false,direction:'top'});
+  });
+  const latlngs=coords.map(c=>c.latlng);
+  if(latlngs.length>1){
+    L.polyline(latlngs,{color:'#1f5f8b',weight:4,opacity:.68,dashArray:'8 7'}).addTo(detailPlanMap);
+    detailPlanMap.fitBounds(L.latLngBounds(latlngs).pad(.10),{maxZoom:16});
+  }else detailPlanMap.setView(latlngs[0],13);
+  const missing=points.length-coords.length;
+  if(missing>0){
+    const note=document.createElement('div');
+    note.className='plan-map-missing';
+    note.textContent=`${missing} stop${missing===1?'':'s'} could not be placed on the overview map.`;
+    el.parentElement.appendChild(note);
+  }
+  setTimeout(()=>detailPlanMap.invalidateSize(),0);
+}
 function statusKey(type,id){return `antibes-status-${type}-${id}`}
 function getStatus(type,id){return localStorage.getItem(statusKey(type,id))||'want'}
 function statusHTML(type,id){const cur=getStatus(type,id);return `<div class="status-row">${[['want','Want to go'],['maybe','Maybe'],['been','Been']].map(([v,l])=>`<button class="status-btn ${cur===v?'active':''}" data-status-type="${type}" data-status-id="${id}" data-status="${v}">${l}</button>`).join('')}</div>`}
@@ -41,7 +160,7 @@ function renderPlans(){$('#planCount').textContent=String(W.length).padStart(2,'
 function openPlace(id){const x=pMap[id];if(!x)return;setReturn('explore');state.activeDetail={type:'place',id};$('#detailContext').textContent='EXPLORE';$('#detailBody').innerHTML=`<div class="detail-hero"><p class="eyebrow">${x.area} · ${x.type}</p><h1>${x.title}</h1><p>${x.short}</p></div><section class="detail-section"><span class="avail">${x.availability?.label||'November ✓'}</span><h2>Warum gespeichert?</h2><p>${x.take}</p><p><b>November:</b> ${x.availability?.note||'Open.'}</p></section><section class="detail-section"><h2>Status</h2>${statusHTML('place',id)}</section><section class="detail-section"><div class="actions"><a class="action primary" href="${directions(x.address)}" ${mapLinkAttrs()}>Directions</a>${x.website?`<a class="action" href="${x.website}" target="_blank" rel="noopener">Website ↗</a>`:''}</div></section>`;showView('detail')}
 function openFood(id){const x=gMap[id];if(!x)return;setReturn('food');state.activeDetail={type:'food',id};$('#detailContext').textContent='EAT & DRINK';$('#detailBody').innerHTML=`<div class="detail-hero food"><p class="eyebrow">${x.area} · ${x.kind.toUpperCase()}</p><h1>${x.title}</h1><p>${x.best}</p></div><section class="detail-section"><h2>Our take</h2><p>${x.take}</p><div class="tags">${x.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div><div class="outdoor">${outdoorLabel[x.outdoor]||''}</div></section><section class="detail-section"><h2>Status</h2>${statusHTML('food',id)}</section><section class="detail-section"><div class="actions"><a class="action primary" href="${directions(x.address)}" ${mapLinkAttrs()}>Directions</a>${x.website?`<a class="action" href="${x.website}" target="_blank" rel="noopener">Website ↗</a>`:''}</div></section>`;showView('detail')}
 function stopData(s){if(s.place){const x=pMap[s.place];return x?{title:x.title,desc:x.short,type:'place',id:x.id,optional:!!s.optional}:null}if(s.food){const x=gMap[s.food];return x?{title:x.title,desc:x.best,type:'food',id:x.id,optional:!!s.optional}:null}if(s.label)return {title:s.label,desc:s.note||'',type:'note',optional:!!s.optional};return null}
-function openPlan(id,push=true){const x=W.find(p=>p.id===id);if(!x)return;state.returnTarget={type:'view',view:'plans'};state.activeDetail={type:'plan',id};$('#detailContext').textContent='PLANS';const steps=x.stops.map(stopData).filter(Boolean);$('#detailBody').innerHTML=`<div class="detail-hero plan"><p class="eyebrow">${x.meta.join(' · ')}</p><h1>${x.title}</h1><p>${x.subtitle}</p></div>${x.timing?`<section class="detail-section timing-box"><p class="eyebrow">BEST DAY / WATCH OUT</p><p>${x.timing}</p></section>`:''}<section class="detail-section"><h2>Why this works</h2><p>${x.intro}</p>${x.source?`<a class="source-link" href="${x.source}" target="_blank" rel="noopener">${x.sourceLabel||'Source walk'} ↗</a>`:''}</section><section class="detail-section"><h2>Stop by stop</h2>${steps.map((s,i)=>`<div class="step ${s.optional?'optional-step':''}"><div class="step-num">${i+1}</div><div><h3>${s.title}${s.optional?` <span class="optional-label">OPTIONAL</span>`:''}</h3><p>${s.desc}</p>${s.type==='place'?`<button data-open-place="${s.id}">Details</button>`:s.type==='food'?`<button data-open-food="${s.id}">Details</button>`:''}</div></div>`).join('')}</section><section class="detail-section"><div class="actions"><a class="action primary" href="${planDirections(x)}" ${mapLinkAttrs()}>Open route ↗</a><button class="action" data-view="plans">All plans</button></div></section>`;showView('detail',push)}
+function openPlan(id,push=true){const x=W.find(p=>p.id===id);if(!x)return;state.returnTarget={type:'view',view:'plans'};state.activeDetail={type:'plan',id};$('#detailContext').textContent='PLANS';const steps=x.stops.map(stopData).filter(Boolean);$('#detailBody').innerHTML=`<div class="detail-hero plan"><p class="eyebrow">${x.meta.join(' · ')}</p><h1>${x.title}</h1><p>${x.subtitle}</p></div>${x.timing?`<section class="detail-section timing-box"><p class="eyebrow">BEST DAY / WATCH OUT</p><p>${x.timing}</p></section>`:''}<section class="detail-section"><h2>Why this works</h2><p>${x.intro}</p>${x.source?`<a class="source-link" href="${x.source}" target="_blank" rel="noopener">${x.sourceLabel||'Source walk'} ↗</a>`:''}</section><section class="detail-section plan-map-section"><h2>Route overview</h2><p class="plan-map-copy">All mappable stops at a glance. Numbers match the stop list; lighter markers are optional. Google Maps below still uses the simpler core route.</p><div id="planOverviewMap" class="plan-overview-map"></div></section><section class="detail-section"><h2>Stop by stop</h2>${steps.map((s,i)=>`<div class="step ${s.optional?'optional-step':''}"><div class="step-num">${i+1}</div><div><h3>${s.title}${s.optional?` <span class="optional-label">OPTIONAL</span>`:''}</h3><p>${s.desc}</p>${s.type==='place'?`<button data-open-place="${s.id}">Details</button>`:s.type==='food'?`<button data-open-food="${s.id}">Details</button>`:''}</div></div>`).join('')}</section><section class="detail-section"><div class="actions"><a class="action primary" href="${planDirections(x)}" ${mapLinkAttrs()}>Open route ↗</a><button class="action" data-view="plans">All plans</button></div></section>`;showView('detail',push);setTimeout(()=>renderPlanOverviewMap(x),40)}
 function initMap(){if(state.map){setTimeout(()=>state.map.invalidateSize(),0);return}state.map=L.map('map',{scrollWheelZoom:false}).setView([43.67,7.16],9);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(state.map);Object.entries(areaCoords).forEach(([area,coords])=>{const count=P.filter(x=>x.area===area).length+G.filter(x=>x.area===area).length;const icon=L.divIcon({className:'',html:`<div class="map-bubble">${count}</div>`,iconSize:[42,42],iconAnchor:[21,21]});const m=L.marker(coords,{icon}).addTo(state.map);m.bindPopup(`<b>${area}</b><br>${count} saved items`);m.on('click',()=>{});})}
 $('#themeToggle').onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('antibes-theme',document.body.classList.contains('dark')?'dark':'light')};if(localStorage.getItem('antibes-theme')==='dark')document.body.classList.add('dark');
 renderHome();renderExploreControls();renderExplore();renderFoodControls();renderFood();renderEventControls();renderEvents();renderPlans();
@@ -51,6 +170,6 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations().then(regs=>Promise.all(regs.map(r=>r.unregister()))).catch(()=>{});
     if('caches' in window)caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('antibes-our-way-')).map(k=>caches.delete(k)))).catch(()=>{});
   }else{
-    navigator.serviceWorker.register('./service-worker.js?v=1.1',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
+    navigator.serviceWorker.register('./service-worker.js?v=1.4',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
   }
 }
