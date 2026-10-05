@@ -1,4 +1,4 @@
-const VERSION='1.5';
+const VERSION='1.6';
 const CACHE=`antibes-our-way-v${VERSION}`;
 const APP_SHELL=[
   './',
@@ -34,7 +34,6 @@ self.addEventListener('fetch',event=>{
   const url=new URL(request.url);
   if(url.origin!==self.location.origin) return;
 
-  // HTML/navigation: always prefer the network so a new release appears immediately.
   if(request.mode==='navigate'){
     event.respondWith((async()=>{
       try{
@@ -49,7 +48,6 @@ self.addEventListener('fetch',event=>{
     return;
   }
 
-  // Versioned app assets can safely be cache-first: each release has a new URL.
   event.respondWith((async()=>{
     const cached=await caches.match(request);
     if(cached) return cached;
