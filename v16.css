@@ -1,0 +1,6 @@
+/* v1.6 — plan overview maps use markers only; hide any legacy Leaflet route overlays. */
+#planOverviewMap .leaflet-overlay-pane,
+#planOverviewMap .leaflet-overlay-pane svg,
+#planOverviewMap .leaflet-overlay-pane path {
+  display: none !important;
+}
