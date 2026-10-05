@@ -1,0 +1,2 @@
+/* v1.5 — cleaner plan overview maps */
+#planOverviewMap .leaflet-overlay-pane path { display: none; }
