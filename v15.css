@@ -1,2 +1,6 @@
-/* v1.5 — cleaner plan overview maps */
-#planOverviewMap .leaflet-overlay-pane path { display: none; }
+/* v1.6 hotfix — plan overview maps show markers only; hide every legacy Leaflet vector overlay. */
+#planOverviewMap .leaflet-overlay-pane,
+#planOverviewMap .leaflet-overlay-pane svg,
+#planOverviewMap .leaflet-overlay-pane path {
+  display: none !important;
+}
