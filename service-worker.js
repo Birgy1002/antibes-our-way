@@ -1,18 +1,17 @@
-const VERSION='1.7';
+const VERSION='1.8';
 const CACHE=`antibes-our-way-v${VERSION}`;
 const APP_SHELL=[
   './',
   './index.html',
-  './style.css?v=1.5',
-  './v15.css?v=1.5',
-  './app.js?v=1.5',
-  './data/places.js?v=1.5',
-  './data/gastro.js?v=1.5',
-  './data/plans.js?v=1.5',
-  './data/events.js?v=1.5',
-  './manifest.webmanifest?v=1.5',
-  './assets/icon-192.png?v=1.5',
-  './assets/icon-512.png?v=1.5'
+  './style.css?v=1.8',
+  './app.js?v=1.8',
+  './data/places.js?v=1.8',
+  './data/gastro.js?v=1.8',
+  './data/plans.js?v=1.8',
+  './data/events.js?v=1.8',
+  './manifest.webmanifest?v=1.8',
+  './assets/icon-192.png?v=1.8',
+  './assets/icon-512.png?v=1.8'
 ];
 
 self.addEventListener('install',event=>{
@@ -51,7 +50,7 @@ self.addEventListener('fetch',event=>{
   event.respondWith((async()=>{
     const cached=await caches.match(request);
     if(cached) return cached;
-    const response=await fetch(request);
+    const response=await fetch(request,{cache:'no-store'});
     if(response.ok){
       const cache=await caches.open(CACHE);
       cache.put(request,response.clone()).catch(()=>{});
