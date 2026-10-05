@@ -124,7 +124,6 @@ async function renderPlanOverviewMap(plan){
   });
   const latlngs=coords.map(c=>c.latlng);
   if(latlngs.length>1){
-    L.polyline(latlngs,{color:'#1f5f8b',weight:4,opacity:.68,dashArray:'8 7'}).addTo(detailPlanMap);
     detailPlanMap.fitBounds(L.latLngBounds(latlngs).pad(.10),{maxZoom:16});
   }else detailPlanMap.setView(latlngs[0],13);
   const missing=points.length-coords.length;
@@ -170,6 +169,6 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations().then(regs=>Promise.all(regs.map(r=>r.unregister()))).catch(()=>{});
     if('caches' in window)caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('antibes-our-way-')).map(k=>caches.delete(k)))).catch(()=>{});
   }else{
-    navigator.serviceWorker.register('./service-worker.js?v=1.4',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
+    navigator.serviceWorker.register('./service-worker.js?v=1.7',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
   }
 }
