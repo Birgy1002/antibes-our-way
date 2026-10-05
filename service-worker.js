@@ -1,4 +1,4 @@
-const VERSION='1.6';
+const VERSION='1.7';
 const CACHE=`antibes-our-way-v${VERSION}`;
 const APP_SHELL=[
   './',
