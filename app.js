@@ -169,6 +169,6 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations().then(regs=>Promise.all(regs.map(r=>r.unregister()))).catch(()=>{});
     if('caches' in window)caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('antibes-our-way-')).map(k=>caches.delete(k)))).catch(()=>{});
   }else{
-    navigator.serviceWorker.register('./service-worker.js?v=1.7',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
+    navigator.serviceWorker.register('./service-worker.js?v=1.9',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
   }
 }
