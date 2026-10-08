@@ -1,17 +1,17 @@
-const VERSION='1.9';
+const VERSION='2.0';
 const CACHE=`antibes-our-way-v${VERSION}`;
 const APP_SHELL=[
   './',
   './index.html',
-  './style.css?v=1.9',
-  './app.js?v=1.9',
-  './data/places.js?v=1.9',
-  './data/gastro.js?v=1.9',
-  './data/plans.js?v=1.9',
-  './data/events.js?v=1.9',
-  './manifest.webmanifest?v=1.9',
-  './assets/icon-192.png?v=1.9',
-  './assets/icon-512.png?v=1.9'
+  './style.css?v=2.0',
+  './app.js?v=2.0',
+  './data/places.js?v=2.0',
+  './data/gastro.js?v=2.0',
+  './data/plans.js?v=2.0',
+  './data/events.js?v=2.0',
+  './manifest.webmanifest?v=2.0',
+  './assets/icon-192.png?v=2.0',
+  './assets/icon-512.png?v=2.0'
 ];
 
 self.addEventListener('install',event=>{
@@ -32,6 +32,23 @@ self.addEventListener('fetch',event=>{
   if(request.method!=='GET') return;
   const url=new URL(request.url);
   if(url.origin!==self.location.origin) return;
+
+  // Event radar is updated frequently: always fetch fresh data first.
+  // Offline users retain the last successfully loaded radar.
+  if(url.pathname.endsWith('/data/events.js')){
+    event.respondWith((async()=>{
+      try{
+        const fresh=await fetch(request,{cache:'no-store'});
+        if(!fresh.ok) throw new Error('Event radar unavailable');
+        const cache=await caches.open(CACHE);
+        await cache.put(request,fresh.clone());
+        return fresh;
+      }catch(err){
+        return (await caches.match(request)) || Response.error();
+      }
+    })());
+    return;
+  }
 
   if(request.mode==='navigate'){
     event.respondWith((async()=>{
