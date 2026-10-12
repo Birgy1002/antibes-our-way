@@ -112,3 +112,11 @@ Eat & Drink filters are now dimensional: Type (Coffee/Wine/Restaurant), Extras (
 - Pinch zoom and dragging are enabled on touch devices; desktop gets +/− zoom controls and drag/double-click zoom.
 - Mouse-wheel zoom remains off so normal page scrolling is not hijacked.
 - Google Maps route-link logic is unchanged.
+
+
+## v2.1 – Bellet wine country
+- Added Bellet AOP background with key facts and local grapes.
+- Added Château de Bellet, Château de Crémat and Domaine Saint Jean.
+- Added a dedicated half-day Bellet wine plan.
+- Added Wine as an Explore filter.
+- Bumped PWA assets/cache to v2.1.
