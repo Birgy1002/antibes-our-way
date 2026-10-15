@@ -1,4 +1,6 @@
-const P=window.PLACES,G=window.GASTRO,W=window.PLANS,E=window.EVENTS;
+const P=window.PLACES,G=window.GASTRO,W=window.PLANS;
+const STAY_START='2026-11-06',STAY_END='2026-11-23';
+const E=(window.EVENTS||[]).filter(x=>x.date<=STAY_END&&(x.endDate||x.date)>=STAY_START);
 const pMap=Object.fromEntries(P.map(x=>[x.id,x])),gMap=Object.fromEntries(G.map(x=>[x.id,x]));
 let state={view:'home',area:'All',tag:'All',foodType:'All',foodArea:'All',foodExtras:new Set(),eventTag:'All',activeDetail:null,returnTarget:null,map:null};
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
