@@ -120,3 +120,10 @@ Eat & Drink filters are now dimensional: Type (Coffee/Wine/Restaurant), Extras (
 - Added a dedicated half-day Bellet wine plan.
 - Added Wine as an Explore filter.
 - Bumped PWA assets/cache to v2.1.
+
+
+## v2.2 – Antibes Street Art
+- Added a dedicated Antibes Street Art Explore entry.
+- Added a self-guided central Street Art Walk with key works and fresh 2026 murals.
+- Added Street Art as an Explore filter.
+- Bumped PWA assets/cache to v2.2.
