@@ -127,3 +127,11 @@ Eat & Drink filters are now dimensional: Type (Coffee/Wine/Restaurant), Extras (
 - Added a self-guided central Street Art Walk with key works and fresh 2026 murals.
 - Added Street Art as an Explore filter.
 - Bumped PWA assets/cache to v2.2.
+
+
+## v2.3 – Trip event shortlist
+- Added the guided Antibes Street Art tour on 10 Nov at 14:30.
+- Added the 12 Nov Language Exchange as an alternative to the Nice AI apéro.
+- Marked WordPress + Claude on 19 Nov as a priority event.
+- Removed the 10 Nov entrepreneur apéro, Menton/Monaco event entries, Peyrassol workshop events, the two semi-relevant Cannes quantum events and the post-stay Ephrussi dinner.
+- Bumped PWA assets/cache to v2.3.
