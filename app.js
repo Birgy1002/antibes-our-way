@@ -162,6 +162,33 @@ async function geocodeAddress(address,title=''){
   geocodePending.set(address,promise);
   try{return await promise}finally{geocodePending.delete(address)}
 }
+/* Other travel plans retain geographically unrestricted geocoding: Nice,
+   Monaco and wine trips must not be rejected by the Antibes-only boundary. */
+async function geocodeGeneralAddress(address){
+  if(!address)return null;
+  const key='antibes-general-geocode-v3-'+address;
+  try{
+    const c=JSON.parse(localStorage.getItem(key)||'null');
+    if(Array.isArray(c)&&c.length===2&&c.every(Number.isFinite))return c;
+  }catch(err){}
+  // Serialized for the public OSM service, shared with the street-art fallback.
+  const next=nominatimQueue.catch(()=>{}).then(async()=>{
+    const wait=Math.max(0,1150-(Date.now()-nominatimLastRequest));
+    if(wait)await sleep(wait);
+    nominatimLastRequest=Date.now();
+    try{
+      const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=2&addressdetails=1&q='+encodeURIComponent(address);
+      const entries=await fetchGeocodeJson(url,7000);
+      const hit=(entries||[]).find(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lon)));
+      if(!hit)return null;
+      const coords=[Number(hit.lat),Number(hit.lon)];
+      try{localStorage.setItem(key,JSON.stringify(coords))}catch(err){}
+      return coords;
+    }catch(err){return null}
+  });
+  nominatimQueue=next.then(()=>{},()=>{});
+  return next;
+}
 function markerGroupKey(point){return point.address.trim().toLowerCase()}
 async function renderPlanOverviewMap(plan){
   const el=$('#planOverviewMap');
@@ -171,8 +198,7 @@ async function renderPlanOverviewMap(plan){
   const points=planOverviewPoints(plan);
   const coords=[];
   for(const point of points){
-    const loc=await geocodeAddress(point.address,point.title);
-    const latlng=loc?.coords||null;
+    const latlng=await geocodeGeneralAddress(point.address);
     if(latlng)coords.push({...point,latlng});
   }
   if(coords.length===0){el.innerHTML='<div class="plan-map-fallback">Map preview unavailable for this plan.</div>';return}
