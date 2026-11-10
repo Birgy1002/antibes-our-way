@@ -162,6 +162,11 @@ function detailSectionsHTML(x){return (x.detailSections||[]).map(s=>`<section cl
 function openPlace(id){const x=pMap[id];if(!x)return;setReturn('explore');state.activeDetail={type:'place',id};$('#detailContext').textContent='EXPLORE';$('#detailBody').innerHTML=`<div class="detail-hero"><p class="eyebrow">${x.area} · ${x.type}</p><h1>${x.title}</h1><p>${x.short}</p></div><section class="detail-section"><span class="avail">${x.availability?.label||'November ✓'}</span><h2>Warum gespeichert?</h2><p>${x.take}</p><p><b>November:</b> ${x.availability?.note||'Open.'}</p></section>${detailSectionsHTML(x)}<section class="detail-section"><h2>Status</h2>${statusHTML('place',id)}</section><section class="detail-section"><div class="actions"><a class="action primary" href="${directions(x.address)}" ${mapLinkAttrs()}>Directions</a>${x.website?`<a class="action" href="${x.website}" target="_blank" rel="noopener">Website ↗</a>`:''}</div></section>`;showView('detail')}
 function openFood(id){const x=gMap[id];if(!x)return;setReturn('food');state.activeDetail={type:'food',id};$('#detailContext').textContent='EAT & DRINK';$('#detailBody').innerHTML=`<div class="detail-hero food"><p class="eyebrow">${x.area} · ${x.kind.toUpperCase()}</p><h1>${x.title}</h1><p>${x.best}</p></div><section class="detail-section"><h2>Our take</h2><p>${x.take}</p><div class="tags">${x.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div><div class="outdoor">${outdoorLabel[x.outdoor]||''}</div></section><section class="detail-section"><h2>Status</h2>${statusHTML('food',id)}</section><section class="detail-section"><div class="actions"><a class="action primary" href="${directions(x.address)}" ${mapLinkAttrs()}>Directions</a>${x.website?`<a class="action" href="${x.website}" target="_blank" rel="noopener">Website ↗</a>`:''}</div></section>`;showView('detail')}
 function stopData(s){if(s.place){const x=pMap[s.place];return x?{title:x.title,desc:x.short,type:'place',id:x.id,optional:!!s.optional}:null}if(s.food){const x=gMap[s.food];return x?{title:x.title,desc:x.best,type:'food',id:x.id,optional:!!s.optional}:null}if(s.label)return {title:s.label,desc:s.note||'',type:'note',optional:!!s.optional};return null}
+let streetClusterMaps=[];
+function clearStreetClusterMaps(){
+  streetClusterMaps.forEach(m=>{try{m.remove()}catch(e){}});
+  streetClusterMaps=[];
+}
 function clusterDirections(cluster,defaultMode='walking'){
   const mode=cluster.mode||defaultMode;
   const points=(cluster.items||[]).filter(i=>i.address).map((i,index)=>({address:i.address,index}));
@@ -170,17 +175,80 @@ function clusterDirections(cluster,defaultMode='walking'){
   if(compact.length===1)return directions(compact[0].address,mode);
   return googleDirectionsUrl({origin:compact[0].address,destination:compact[compact.length-1].address,waypoints:compact.slice(1,-1).map(x=>x.address),mode});
 }
+function clusterMapItems(cluster,maxPoints=7){
+  const all=(cluster.items||[]).map((item,index)=>({item,index,address:item.address})).filter(x=>x.address);
+  if(all.length<=maxPoints)return all;
+  const picked=[all[0]];
+  const interior=all.slice(1,-1);
+  for(let i=0;i<maxPoints-2;i++){
+    const idx=Math.round((i+1)*(interior.length+1)/(maxPoints-1))-1;
+    const p=interior[Math.max(0,Math.min(interior.length-1,idx))];
+    if(p&&!picked.includes(p))picked.push(p);
+  }
+  picked.push(all[all.length-1]);
+  return picked;
+}
+function streetPopup(item,index,mode){
+  const facts=item.facts?'<div class="street-popup-facts">'+item.facts+'</div>':'';
+  const access=item.access?'<div class="street-popup-access">'+item.access+'</div>':'';
+  const maps=item.address?'<a href="'+directions(item.address,mode)+'" '+mapLinkAttrs()+'>Google Maps ↗</a>':'';
+  return '<div class="street-popup"><b>'+(index+1)+'. '+item.title+'</b>'+facts+access+maps+'</div>';
+}
+async function renderStreetClusterMap(plan,cluster,ci){
+  const el=document.getElementById('streetClusterMap-'+ci);
+  if(!el||typeof L==='undefined')return;
+  el.innerHTML='<div class="plan-map-loading">Karte wird geladen…</div>';
+  const points=clusterMapItems(cluster,7);
+  if(!points.length){el.innerHTML='<div class="plan-map-fallback">Für diesen Cluster gibt es keinen Kartenpunkt.</div>';return}
+  let map=null;
+  const latlngs=[];
+  for(const point of points){
+    const latlng=await geocodeAddress(point.address,point.item.title);
+    if(!latlng)continue;
+    if(!map){
+      el.innerHTML='';
+      map=L.map(el,{zoomControl:true,dragging:true,scrollWheelZoom:false,doubleClickZoom:true,boxZoom:false,keyboard:false,tap:true,touchZoom:true,attributionControl:true});
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap contributors'}).addTo(map);
+      streetClusterMaps.push(map);
+    }
+    latlngs.push(latlng);
+    const icon=L.divIcon({className:'',html:'<div class="plan-marker">'+(point.index+1)+'</div>',iconSize:[34,34],iconAnchor:[17,17]});
+    L.marker(latlng,{icon}).addTo(map).bindPopup(streetPopup(point.item,point.index,cluster.mode||plan.mode));
+    if(latlngs.length===1)map.setView(latlng,15);
+    else map.fitBounds(L.latLngBounds(latlngs).pad(.12),{maxZoom:16});
+    setTimeout(()=>map.invalidateSize(),0);
+  }
+  if(!map)el.innerHTML='<div class="plan-map-fallback">Kartenpunkte konnten nicht geladen werden. Die Google-Maps-Links funktionieren trotzdem.</div>';
+}
+async function renderStreetClusterMaps(plan){
+  clearStreetClusterMaps();
+  for(let ci=0;ci<(plan.clusters||[]).length;ci++){
+    await renderStreetClusterMap(plan,plan.clusters[ci],ci);
+  }
+}
 function planClustersHTML(plan){
   return (plan.clusters||[]).map((cluster,ci)=>{
     const route=clusterDirections(cluster,plan.mode);
     return `<section class="detail-section street-cluster">
       <div class="street-cluster-head"><div><p class="eyebrow">${cluster.meta||''}</p><h2>${cluster.title}</h2></div>${route!=='#'?`<a class="cluster-map-btn" href="${route}" ${mapLinkAttrs()}>Route in Google Maps ↗</a>`:''}</div>
       <p class="street-cluster-note">${cluster.note||''}</p>
-      <div class="street-list">${(cluster.items||[]).map((item,i)=>`<div class="street-item"><div class="street-num">${i+1}</div><div class="street-copy"><h3>${item.title}</h3><p>${item.note||''}</p></div>${item.address?`<a class="street-map-btn" href="${directions(item.address,cluster.mode||plan.mode)}" ${mapLinkAttrs()}>Maps ↗</a>`:''}</div>`).join('')}</div>
+      <div id="streetClusterMap-${ci}" class="street-cluster-map"></div>
+      <div class="street-map-caption">Orientierungskarte · Marker antippen für Werk + Google Maps. Bei großen Clustern zeigt die Karte repräsentative Punkte.</div>
+      <div class="street-list">${(cluster.items||[]).map((item,i)=>`<div class="street-item"><div class="street-num">${i+1}</div><div class="street-copy"><h3>${item.title}</h3>${item.facts?`<div class="street-facts">${item.facts}</div>`:''}${item.access?`<div class="street-access">${item.access}</div>`:''}<p>${item.note||''}</p></div>${item.address?`<a class="street-map-btn" href="${directions(item.address,cluster.mode||plan.mode)}" ${mapLinkAttrs()}>Maps ↗</a>`:''}</div>`).join('')}</div>
     </section>`;
   }).join('');
 }
-function openPlan(id,push=true){const x=W.find(p=>p.id===id);if(!x)return;state.returnTarget={type:'view',view:'plans'};state.activeDetail={type:'plan',id};$('#detailContext').textContent='PLANS';const steps=(x.stops||[]).map(stopData).filter(Boolean);const clustered=Array.isArray(x.clusters)&&x.clusters.length>0;$('#detailBody').innerHTML=`<div class="detail-hero plan"><p class="eyebrow">${x.meta.join(' · ')}</p><h1>${x.title}</h1><p>${x.subtitle}</p></div>${x.timing?`<section class="detail-section timing-box"><p class="eyebrow">BEST DAY / WATCH OUT</p><p>${x.timing}</p></section>`:''}<section class="detail-section"><h2>Why this works</h2><p>${x.intro}</p>${x.source?`<a class="source-link" href="${x.source}" target="_blank" rel="noopener">${x.sourceLabel||'Source walk'} ↗</a>`:''}</section>${clustered?planClustersHTML(x):`<section class="detail-section plan-map-section"><h2>Route overview</h2><p class="plan-map-copy">All mappable stops at a glance. Numbers match the stop list; lighter markers are optional. Google Maps below still uses the simpler core route.</p><div id="planOverviewMap" class="plan-overview-map"></div></section><section class="detail-section"><h2>Stop by stop</h2>${steps.map((s,i)=>`<div class="step ${s.optional?'optional-step':''}"><div class="step-num">${i+1}</div><div><h3>${s.title}${s.optional?` <span class="optional-label">OPTIONAL</span>`:''}</h3><p>${s.desc}</p>${s.type==='place'?`<button data-open-place="${s.id}">Details</button>`:s.type==='food'?`<button data-open-food="${s.id}">Details</button>`:''}</div></div>`).join('')}</section>`}<section class="detail-section"><div class="actions">${clustered?'':`<a class="action primary" href="${planDirections(x)}" ${mapLinkAttrs()}>Open route ↗</a>`}<button class="action" data-view="plans">All plans</button></div></section>`;showView('detail',push);if(!clustered)setTimeout(()=>renderPlanOverviewMap(x),40)}
+function openPlan(id,push=true){
+  clearStreetClusterMaps();
+  if(detailPlanMap){detailPlanMap.remove();detailPlanMap=null}
+  const x=W.find(p=>p.id===id);if(!x)return;
+  state.returnTarget={type:'view',view:'plans'};state.activeDetail={type:'plan',id};$('#detailContext').textContent='PLANS';
+  const steps=(x.stops||[]).map(stopData).filter(Boolean);
+  const clustered=Array.isArray(x.clusters)&&x.clusters.length>0;
+  $('#detailBody').innerHTML=`<div class="detail-hero plan"><p class="eyebrow">${x.meta.join(' · ')}</p><h1>${x.title}</h1><p>${x.subtitle}</p></div>${x.timing?`<section class="detail-section timing-box"><p class="eyebrow">BEST DAY / WATCH OUT</p><p>${x.timing}</p></section>`:''}<section class="detail-section"><h2>Why this works</h2><p>${x.intro}</p>${x.source?`<a class="source-link" href="${x.source}" target="_blank" rel="noopener">${x.sourceLabel||'Source walk'} ↗</a>`:''}</section>${clustered?planClustersHTML(x):`<section class="detail-section plan-map-section"><h2>Route overview</h2><p class="plan-map-copy">All mappable stops at a glance. Numbers match the stop list; lighter markers are optional. Google Maps below still uses the simpler core route.</p><div id="planOverviewMap" class="plan-overview-map"></div></section><section class="detail-section"><h2>Stop by stop</h2>${steps.map((s,i)=>`<div class="step ${s.optional?'optional-step':''}"><div class="step-num">${i+1}</div><div><h3>${s.title}${s.optional?` <span class="optional-label">OPTIONAL</span>`:''}</h3><p>${s.desc}</p>${s.type==='place'?`<button data-open-place="${s.id}">Details</button>`:s.type==='food'?`<button data-open-food="${s.id}">Details</button>`:''}</div></div>`).join('')}</section>`}<section class="detail-section"><div class="actions">${clustered?'':`<a class="action primary" href="${planDirections(x)}" ${mapLinkAttrs()}>Open route ↗</a>`}<button class="action" data-view="plans">All plans</button></div></section>`;
+  showView('detail',push);
+  if(clustered)setTimeout(()=>renderStreetClusterMaps(x),40);else setTimeout(()=>renderPlanOverviewMap(x),40);
+}
 function initMap(){if(state.map){setTimeout(()=>state.map.invalidateSize(),0);return}state.map=L.map('map',{scrollWheelZoom:false}).setView([43.67,7.16],9);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(state.map);Object.entries(areaCoords).forEach(([area,coords])=>{const count=P.filter(x=>x.area===area).length+G.filter(x=>x.area===area).length;const icon=L.divIcon({className:'',html:`<div class="map-bubble">${count}</div>`,iconSize:[42,42],iconAnchor:[21,21]});const m=L.marker(coords,{icon}).addTo(state.map);m.bindPopup(`<b>${area}</b><br>${count} saved items`);m.on('click',()=>{});})}
 $('#themeToggle').onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('antibes-theme',document.body.classList.contains('dark')?'dark':'light')};if(localStorage.getItem('antibes-theme')==='dark')document.body.classList.add('dark');
 renderHome();renderExploreControls();renderExplore();renderFoodControls();renderFood();renderEventControls();renderEvents();renderPlans();
@@ -190,6 +258,6 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations().then(regs=>Promise.all(regs.map(r=>r.unregister()))).catch(()=>{});
     if('caches' in window)caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('antibes-our-way-')).map(k=>caches.delete(k)))).catch(()=>{});
   }else{
-    navigator.serviceWorker.register('./service-worker.js?v=2.5',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
+    navigator.serviceWorker.register('./service-worker.js?v=2.6',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
   }
 }
