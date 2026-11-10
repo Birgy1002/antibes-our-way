@@ -135,3 +135,10 @@ Eat & Drink filters are now dimensional: Type (Coffee/Wine/Restaurant), Extras (
 - Marked WordPress + Claude on 19 Nov as a priority event.
 - Removed the 10 Nov entrepreneur apéro, Menton/Monaco event entries, Peyrassol workshop events, the two semi-relevant Cannes quantum events and the post-stay Ephrussi dinner.
 - Bumped PWA assets/cache to v2.3.
+
+
+## v2.4 – Gastro links & Lazaro
+- Added Lazaro and removed Ferni.
+- Audited Gastro links and replaced tourism/intermediary pages with operator websites or verified official social profiles where no standalone website was found.
+- Switched Antibes Street Art to the Coul’Heures d’Automne festival website while retaining the official Antibes route as the plan source.
+- Bumped PWA assets/cache to v2.4.
