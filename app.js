@@ -113,9 +113,14 @@ async function ignGeocode(address){
         const xy=feature.geometry?.coordinates||[];
         const p=feature.properties||{};
         const lat=Number(xy[1]),lon=Number(xy[0]);
-        const city=String(p.city||p.citycode||'').toLowerCase();
+        const city=String(p.city||'').toLowerCase();
+        const citycode=String(p.citycode||'');
         if(!validAntibesLocation(lat,lon))return null;
-        if(city && !city.includes('antibes')&&city!=='06004')return null;
+        if(citycode && citycode!=='06004')return null;
+        if(!citycode && city && !city.includes('antibes') && !city.includes('juan-les-pins'))return null;
+        const requestedNumber=q.match(/^\s*(\d+)\s/);
+        const resultNumber=String(p.housenumber||p.number||'').match(/^\s*(\d+)/);
+        if(requestedNumber&&resultNumber&&requestedNumber[1]!==resultNumber[1])return null;
         const score=Number(p.score??0.5);
         if(score<0.38)return null;
         return {coords:[lat,lon],approx:isApproximateAddress(q,feature),source:'IGN/BAN',score,label:p.label||q};
