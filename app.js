@@ -224,17 +224,20 @@ function detailSectionsHTML(x){return (x.detailSections||[]).map(s=>`<section cl
 function openPlace(id){const x=pMap[id];if(!x)return;setReturn('explore');state.activeDetail={type:'place',id};$('#detailContext').textContent='EXPLORE';$('#detailBody').innerHTML=`<div class="detail-hero"><p class="eyebrow">${x.area} · ${x.type}</p><h1>${x.title}</h1><p>${x.short}</p></div><section class="detail-section"><span class="avail">${x.availability?.label||'November ✓'}</span><h2>Warum gespeichert?</h2><p>${x.take}</p><p><b>November:</b> ${x.availability?.note||'Open.'}</p></section>${detailSectionsHTML(x)}<section class="detail-section"><h2>Status</h2>${statusHTML('place',id)}</section><section class="detail-section"><div class="actions"><a class="action primary" href="${directions(x.address)}" ${mapLinkAttrs()}>Directions</a>${x.website?`<a class="action" href="${x.website}" target="_blank" rel="noopener">Website ↗</a>`:''}</div></section>`;showView('detail')}
 function openFood(id){const x=gMap[id];if(!x)return;setReturn('food');state.activeDetail={type:'food',id};$('#detailContext').textContent='EAT & DRINK';$('#detailBody').innerHTML=`<div class="detail-hero food"><p class="eyebrow">${x.area} · ${x.kind.toUpperCase()}</p><h1>${x.title}</h1><p>${x.best}</p></div><section class="detail-section"><h2>Our take</h2><p>${x.take}</p><div class="tags">${x.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div><div class="outdoor">${outdoorLabel[x.outdoor]||''}</div></section><section class="detail-section"><h2>Status</h2>${statusHTML('food',id)}</section><section class="detail-section"><div class="actions"><a class="action primary" href="${directions(x.address)}" ${mapLinkAttrs()}>Directions</a>${x.website?`<a class="action" href="${x.website}" target="_blank" rel="noopener">Website ↗</a>`:''}</div></section>`;showView('detail')}
 function stopData(s){if(s.place){const x=pMap[s.place];return x?{title:x.title,desc:x.short,type:'place',id:x.id,optional:!!s.optional}:null}if(s.food){const x=gMap[s.food];return x?{title:x.title,desc:x.best,type:'food',id:x.id,optional:!!s.optional}:null}if(s.label)return {title:s.label,desc:s.note||'',type:'note',optional:!!s.optional};return null}
+
+/* Street Art: one consistent, geographically ordered source for the numbered
+   list, map markers and linked Google Maps segments. Unlocated stops remain
+   visible but never receive invented coordinates. */
 let streetClusterMaps=[];
 let streetMapGeneration=0;
 const streetClusterFocus=new Map();
-// The list works as a secondary control for Leaflet markers. If a pin is unavailable,
-// the same interaction opens the existing Google Maps destination instead.
+const streetRouteState=new Map();
 document.addEventListener('click',e=>{
   const btn=e.target.closest('[data-street-focus]');
   if(!btn)return;
   const focus=streetClusterFocus.get(btn.dataset.streetFocus);
   if(focus){
-    focus.map.flyTo(focus.marker.getLatLng(),Math.max(focus.map.getZoom(),17));
+    focus.map.flyTo(focus.marker.getLatLng(),Math.max(focus.map.getZoom(),16));
     focus.marker.openPopup();
     focus.map.getContainer().scrollIntoView({behavior:'smooth',block:'center'});
   }else{
@@ -245,6 +248,7 @@ document.addEventListener('click',e=>{
 function clearStreetClusterMaps(){
   streetMapGeneration++;
   streetClusterFocus.clear();
+  streetRouteState.clear();
   streetClusterMaps.forEach(m=>{try{m.remove()}catch(e){}});
   streetClusterMaps=[];
 }
@@ -255,19 +259,18 @@ function uniqueClusterStops(cluster){
   const byAddress=new Map();
   (cluster.items||[]).forEach((item,index)=>{
     if(!item.address)return;
-    const key=item.address.trim().toLowerCase();
-    if(!byAddress.has(key))byAddress.set(key,{address:item.address,items:[{item,index}]});
+    const key=item.address.trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'');
+    if(!byAddress.has(key))byAddress.set(key,{address:item.address,items:[{item,index}],oldIndex:index});
     else byAddress.get(key).items.push({item,index});
   });
   return [...byAddress.values()];
 }
-function routeChunks(cluster,maxStops=5){
-  const stops=uniqueClusterStops(cluster);
-  if(stops.length<=maxStops)return stops.length?[stops]:[];
+function routeChunks(groups,maxStops=5){
+  if(groups.length<=maxStops)return groups.length?[groups]:[];
   const chunks=[];
   let start=0;
-  while(start<stops.length-1){
-    const chunk=stops.slice(start,Math.min(stops.length,start+maxStops));
+  while(start<groups.length-1){
+    const chunk=groups.slice(start,Math.min(groups.length,start+maxStops));
     if(chunk.length<2)break;
     chunks.push(chunk);
     start+=maxStops-1;
@@ -283,15 +286,19 @@ function chunkRouteUrl(chunk,mode){
     mode
   });
 }
-function clusterRouteButtons(cluster,defaultMode='walking'){
-  const mode=cluster.mode||defaultMode;
-  const chunks=routeChunks(cluster,5);
-  if(!chunks.length)return '';
+function clusterRouteButtons(cluster,mode='walking',ci=null){
+  const ready=ci===null?null:streetRouteState.get(ci);
+  if(!ready)return '<span class="street-route-loading">Standorte und Route werden geprüft …</span>';
+  const chunks=routeChunks(ready.groups,5);
+  let routes='';
   if(chunks.length===1){
     const url=chunkRouteUrl(chunks[0],mode);
-    return '<a class="cluster-map-btn" href="'+url+'" '+mapLinkAttrs()+'>'+(chunks[0].length===1?'Open in Google Maps ↗':'Route in Google Maps ↗')+'</a>';
+    routes='<a class="cluster-map-btn" href="'+url+'" '+mapLinkAttrs()+'>'+(chunks[0].length===1?'Google Maps ↗':'Route in Google Maps ↗')+'</a>';
+  }else if(chunks.length>1){
+    routes='<div class="cluster-route-group">'+chunks.map((chunk,i)=>'<a class="cluster-map-btn" href="'+chunkRouteUrl(chunk,mode)+'" '+mapLinkAttrs()+'>Route '+String.fromCharCode(65+i)+' ↗</a>').join('')+'</div>';
   }
-  return '<div class="cluster-route-group">'+chunks.map((chunk,i)=>'<a class="cluster-map-btn" href="'+chunkRouteUrl(chunk,mode)+'" '+mapLinkAttrs()+'>Route '+String.fromCharCode(65+i)+' ↗</a>').join('')+'</div>';
+  const unlocated=ready.unlocated.length;
+  return '<div class="street-route-ready">'+routes+(unlocated?'<span class="street-route-caveat">'+unlocated+' Standort'+(unlocated===1?'':'e')+' ohne bestätigten Kartenpunkt: nur einzeln über Maps öffnen</span>':'')+'</div>';
 }
 function streetPopupGroup(group,mode){
   const rows=group.items.map(({item,index})=>{
@@ -301,53 +308,136 @@ function streetPopupGroup(group,mode){
     const maps=item.address?'<a href="'+itemMapUrl(item,mode)+'" '+mapLinkAttrs()+'>Google Maps ↗</a>':'';
     return '<div class="street-popup-work"><b>'+(index+1)+'. '+item.title+'</b>'+facts+desc+access+maps+'</div>';
   }).join('');
-  return '<div class="street-popup">'+rows+'</div>';
+  return '<div class="street-popup">'+(group.geo?.approx?'<small>Standort nur näherungsweise · '+group.geo.source+'</small>':'')+rows+'</div>';
+}
+function distanceMetres(a,b){
+  const r=6371000,rad=Math.PI/180;
+  const dLat=(b[0]-a[0])*rad,dLon=(b[1]-a[1])*rad;
+  const p=Math.sin(dLat/2)**2+Math.cos(a[0]*rad)*Math.cos(b[0]*rad)*Math.sin(dLon/2)**2;
+  return 2*r*Math.asin(Math.min(1,Math.sqrt(p)));
+}
+function routeLength(groups){
+  let d=0;for(let i=1;i<groups.length;i++)d+=distanceMetres(groups[i-1].geo.coords,groups[i].geo.coords);
+  return d;
+}
+function optimalStreetGroups(groups,pinStart=false){
+  if(groups.length<3)return [...groups];
+  const candidates=pinStart?[groups[0]]:groups;
+  let best=null,bestLength=Infinity;
+  for(const origin of candidates){
+    const remaining=groups.filter(x=>x!==origin);
+    const trial=[origin];
+    while(remaining.length){
+      const prev=trial[trial.length-1].geo.coords;
+      remaining.sort((a,b)=>distanceMetres(prev,a.geo.coords)-distanceMetres(prev,b.geo.coords)||a.oldIndex-b.oldIndex);
+      trial.push(remaining.shift());
+    }
+    // 2-opt with fixed start; open path, no unneeded return to origin.
+    let improved=true;
+    for(let pass=0;pass<5&&improved;pass++){
+      improved=false;
+      for(let i=1;i<trial.length-1;i++)for(let k=i+1;k<trial.length;k++){
+        const prior=i===0?0:distanceMetres(trial[i-1].geo.coords,trial[i].geo.coords);
+        const later=k===trial.length-1?0:distanceMetres(trial[k].geo.coords,trial[k+1].geo.coords);
+        const swappedBefore=distanceMetres(trial[i-1].geo.coords,trial[k].geo.coords);
+        const swappedAfter=k===trial.length-1?0:distanceMetres(trial[i].geo.coords,trial[k+1].geo.coords);
+        if(swappedBefore+swappedAfter+0.1<prior+later){
+          const reversed=trial.slice(i,k+1).reverse();
+          trial.splice(i,reversed.length,...reversed);
+          improved=true;
+        }
+      }
+    }
+    const score=routeLength(trial);
+    if(score<bestLength){bestLength=score;best=trial}
+  }
+  return best;
+}
+function streetListHTML(cluster,ci){
+  return (cluster.items||[]).map((item,i)=>'<div class="street-item">'+
+    '<div class="street-num">'+(i+1)+'</div><div class="street-copy"><h3>'+item.title+'</h3>'+
+    (item.facts?'<div class="street-facts">'+item.facts+'</div>':'')+
+    (item.description?'<p class="street-description">'+item.description+'</p>':'')+
+    (item.access?'<div class="street-access">'+item.access+'</div>':'')+
+    (item._geoStatus==='approx'?'<span class="street-location-approx">Standort ungefähr (Straße / Adresse, nicht die genaue Werkposition)</span>':'')+
+    (item._geoStatus==='missing'?'<span class="street-location-missing">Nicht automatisch lokalisierbar – keine falsche Markierung</span>':'')+
+    '</div><div class="street-links">'+
+    (item._geoStatus!=='missing'?'<button type="button" class="street-focus-btn" data-street-focus="'+ci+':'+i+'">Auf Karte</button>':'')+
+    (item.address?'<a class="street-map-btn" href="'+itemMapUrl(item,cluster.mode||'walking')+'" '+mapLinkAttrs()+'>Maps ↗</a>':'')+
+    '</div></div>').join('');
 }
 async function renderStreetClusterMap(plan,cluster,ci,generation){
-  const el=document.getElementById('streetClusterMap-'+ci);
-  if(!el||typeof L==='undefined')return;
-  el.innerHTML='<div class="plan-map-loading">Karte wird geladen…</div>';
+  const el=document.getElementById('streetClusterMap-'+ci), section=el?.closest('.street-cluster');
+  if(!el||!section||typeof L==='undefined')return;
+  el.innerHTML='<div class="plan-map-loading">Standorte werden geprüft und geografisch geordnet …</div>';
   const groups=uniqueClusterStops(cluster);
-  if(!groups.length){el.innerHTML='<div class="plan-map-fallback">Für diesen Cluster gibt es keinen festen Kartenpunkt.</div>';return}
-  let map=null;
-  const latlngs=[];
-  let missing=0;
-  for(const group of groups){
-    const title=group.items.map(x=>x.item.title).join(' / ');
-    const latlng=group.items.find(x=>Array.isArray(x.item.coords))?.item.coords || await geocodeAddress(group.address,title);
-    if(generation!==streetMapGeneration||!el.isConnected)return;
-    if(!latlng){missing++;continue}
-    if(!map){
-      el.innerHTML='';
-      map=L.map(el,{zoomControl:true,dragging:true,scrollWheelZoom:false,doubleClickZoom:true,boxZoom:false,keyboard:false,tap:true,touchZoom:true,attributionControl:true});
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap contributors'}).addTo(map);
-      streetClusterMaps.push(map);
-    }
-    latlngs.push(latlng);
-    const nums=group.items.map(x=>x.index+1).join('/');
-    const markerWidth=Math.max(34,Math.min(64,22+nums.length*5));
-    const icon=L.divIcon({className:'',html:'<div class="plan-marker">'+nums+'</div>',iconSize:[markerWidth,34],iconAnchor:[markerWidth/2,17]});
-    const marker=L.marker(latlng,{icon}).addTo(map).bindPopup(streetPopupGroup(group,cluster.mode||plan.mode));
+  if(!groups.length){el.innerHTML='<div class="plan-map-fallback">Keine adressierbaren Standorte.</div>';return}
+  // Parallel per cluster; cache coalesces repeated addresses across clusters.
+  const resolved=await Promise.all(groups.map(async group=>{
+    const specified=group.items.find(x=>Array.isArray(x.item.coords)&&x.item.coords.length===2)?.item.coords;
+    const manual=specified&&validAntibesLocation(...specified)?{coords:specified,approx:true,source:'hinterlegte Näherungsposition'}:null;
+    group.geo=manual || await geocodeAddress(group.address);
+    return group;
+  }));
+  if(generation!==streetMapGeneration||!el.isConnected)return;
+  const known=resolved.filter(group=>group.geo?.coords),unknown=resolved.filter(group=>!group.geo?.coords);
+  const ordered=optimalStreetGroups(known,ci===0);
+  // All works sharing an address stay together. Unresolved entries are at
+  // the end, never inserted into a supposedly navigable route.
+  cluster.items=[...ordered,...unknown].flatMap(group=>group.items.map(x=>x.item));
+  const normalized=uniqueClusterStops(cluster);
+  normalized.forEach(group=>{
+    const old=resolved.find(g=>g.address===group.address);
+    group.geo=old?.geo||null;
+    group.items.forEach(({item})=>{item._geoStatus=!group.geo?'missing':group.geo.approx?'approx':'exact'});
+  });
+  const navigable=normalized.filter(group=>group.geo?.coords);
+  const unlocated=normalized.filter(group=>!group.geo?.coords);
+  streetRouteState.set(ci,{groups:navigable,unlocated});
+  const route=section.querySelector('[data-street-routes]');
+  if(route)route.innerHTML=clusterRouteButtons(cluster,cluster.mode||plan.mode,ci);
+  const list=section.querySelector('[data-street-list]');
+  if(list)list.innerHTML=streetListHTML(cluster,ci);
+  if(!navigable.length){
+    el.innerHTML='<div class="plan-map-fallback">Die Kartenpositionen konnten nicht bestätigt werden. Alle Einträge bleiben unten mit ihrem Maps-Link sichtbar.</div>';
+    return;
+  }
+  el.innerHTML='';
+  const map=L.map(el,{zoomControl:true,dragging:true,scrollWheelZoom:false,doubleClickZoom:true,boxZoom:false,keyboard:false,tap:true,touchZoom:true,attributionControl:true});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap contributors'}).addTo(map);
+  streetClusterMaps.push(map);
+  const allCoords=[];
+  for(const group of navigable){
+    const coord=group.geo.coords;
+    allCoords.push(coord);
+    const nums=group.items.map(x=>x.index+1);
+    const label=nums.length>2?nums[0]+'–'+nums[nums.length-1]:nums.join('/');
+    const w=Math.max(34,Math.min(66,24+label.length*7));
+    const icon=L.divIcon({className:'',html:'<div class="plan-marker'+(group.geo.approx?' street-marker-approx':'')+'">'+label+'</div>',iconSize:[w,34],iconAnchor:[w/2,17]});
+    const marker=L.marker(coord,{icon}).addTo(map).bindPopup(streetPopupGroup(group,cluster.mode||plan.mode));
     group.items.forEach(({index})=>streetClusterFocus.set(ci+':'+index,{map,marker}));
-    if(latlngs.length===1)map.setView(latlng,15);
-    else map.fitBounds(L.latLngBounds(latlngs).pad(.12),{maxZoom:16});
-    setTimeout(()=>map.invalidateSize(),0);
   }
-  if(!map){el.innerHTML='<div class="plan-map-fallback">Kartenpunkte konnten nicht geladen werden. Die Google-Maps-Links funktionieren trotzdem.</div>';return}
-  if(missing){
-    const msg=document.createElement('div');
-    msg.className='street-map-warning';
-    msg.textContent=missing+' Standort'+(missing===1?'':'e')+' konnte'+(missing===1?'':'n')+' nicht automatisch auf der Leaflet-Karte gesetzt werden; der Eintrag und Google-Maps-Link bleiben unten erhalten.';
-    el.parentElement.insertBefore(msg,el.nextSibling);
+  const bounds=L.latLngBounds(allCoords);
+  if(allCoords.length===1)map.setView(allCoords[0],15);
+  else map.fitBounds(bounds.pad(.16),{maxZoom:16});
+  requestAnimationFrame(()=>map.invalidateSize());
+  if(unlocated.length){
+    const warning=section.querySelector('[data-street-warning]');
+    if(warning)warning.textContent=unlocated.length+' Adresse(n) nicht eindeutig lokalisierbar. Diese Werke stehen am Ende der Liste mit einem direkten Maps-Link und sind nicht in der Gruppenroute enthalten.';
   }
+  const approx=navigable.filter(g=>g.geo.approx).length;
+  const status=section.querySelector('[data-street-status]');
+  if(status)status.textContent=navigable.length+' Kartenstandorte · '+approx+' näherungsweise · '+unlocated.length+' ohne Pin. Reihenfolge nach geografischer Nähe; Google Maps legt die begehbaren Straßen fest.';
 }
 async function renderStreetClusterMaps(plan){
   clearStreetClusterMaps();
   const generation=streetMapGeneration;
-  for(let ci=0;ci<(plan.clusters||[]).length;ci++){
-    if(generation!==streetMapGeneration)break;
-    await renderStreetClusterMap(plan,plan.clusters[ci],ci,generation);
-  }
+  // Begin all cluster lookups, rather than waiting for every preceding map.
+  await Promise.all((plan.clusters||[]).map((c,ci)=>renderStreetClusterMap(plan,c,ci,generation).catch(err=>{
+    if(generation!==streetMapGeneration)return;
+    const el=document.getElementById('streetClusterMap-'+ci);
+    if(el)el.innerHTML='<div class="plan-map-fallback">Karte vorübergehend nicht verfügbar. Die Standortliste und Maps-Links sind weiter benutzbar.</div>';
+  })));
 }
 function planSpecialsHTML(plan){
   if(!plan.specials?.length)return '';
