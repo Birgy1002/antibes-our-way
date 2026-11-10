@@ -142,3 +142,12 @@ Eat & Drink filters are now dimensional: Type (Coffee/Wine/Restaurant), Extras (
 - Audited Gastro links and replaced tourism/intermediary pages with operator websites or verified official social profiles where no standalone website was found.
 - Switched Antibes Street Art to the Coul’Heures d’Automne festival website while retaining the official Antibes route as the plan source.
 - Bumped PWA assets/cache to v2.4.
+
+## v3.1 – Street Art: Route- und Karten-Audit (10.11.2026)
+
+- Die 59 Street-Art-Werkeinträge bleiben vollständig erhalten und liegen in sechs Clustern mit 48 unterschiedlichen Adressangaben (Mehrfachstandorte z. B. Hôtel Le Collier, La sChOOL und Krankenhaus).
+- Im Plan werden die Adressen vorrangig über den offiziellen IGN/BAN-Géoplateforme-Geocoder auf Antibes eingegrenzt, plausibilisiert und zwischengespeichert. Bei Bedarf greift eine gedrosselte OSM-Nominatim-Suche. Das ist Adressgeokodierung, **keine** Prüfung jedes einzelnen Murals vor Ort.
+- Die Treffpunkte werden nach geografischer Nähe zu einer offenen Route geordnet (Centre ab Port fest gestartet). Alle bestätigten Standortgruppen werden gleichzeitig als Listennummern, Leaflet-Marker und Google-Maps-Teilstrecken neu ausgegeben. Die Google-Maps-Teilstrecken teilen ihren Anschluss-Stopp und lassen keine **bestätigten** Zwischenpunkte aus.
+- Mehrere Werke an einer Adresse teilen einen Marker. Adressen ohne Hausnummer, geokodierte Mehrfachstandorte und hinterlegte Näherungspositionen tragen einen Genauigkeitshinweis. Nicht lokalisierbare Einträge bleiben vollständig in der Liste und mit Einzellink zu Google Maps, werden aber nicht als falsche Pins oder Routenpunkte ausgegeben.
+- Eine geometrische Näherung ersetzt keine Fußweg-/Straßen-Routing-Engine: tatsächliche Straßenführung und Verkehrsmittel berechnet Google Maps. Die PWA lädt aktualisierte Dateien mit Version v3.1.
+- Die anderen Pläne (Nice, Monaco, Ausflüge) nutzen weiterhin eine geografisch unbeschränkte Standortsuche. Syntax- und Datentest sowie ein isolierter Routensortierungs-/Chunk-Test durchgeführt; Live-Geocoding und iPhone-Verhalten müssen im Browser geprüft werden.
