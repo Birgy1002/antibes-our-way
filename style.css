@@ -253,18 +253,29 @@ main{max-width:980px;margin:0 auto;padding:78px 14px calc(96px + var(--safe))}
 .street-cluster{padding:16px}
 .street-cluster-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
 .street-cluster-head h2{margin:1px 0 0}
-.street-cluster-note{padding-bottom:11px;border-bottom:1px solid var(--line)}
+.street-cluster-note{margin-bottom:12px}
+.street-cluster-map{height:250px;border-radius:17px;border:1px solid var(--line);overflow:hidden;background:#dce7eb;margin:2px 0 6px;cursor:grab}
+.street-cluster-map:active{cursor:grabbing}
+.street-map-caption{font-size:9px;line-height:1.35;color:var(--muted);margin:0 2px 10px}
 .cluster-map-btn,.street-map-btn{flex:0 0 auto;text-decoration:none;border-radius:11px;background:var(--azure);color:#fff;padding:8px 10px;font-size:9px;font-weight:850;white-space:nowrap}
-.street-list{display:grid;gap:0}
+.street-list{display:grid;gap:0;border-top:1px solid var(--line)}
 .street-item{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:9px;align-items:start;padding:12px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 78%,transparent)}
 .street-item:last-child{border-bottom:0;padding-bottom:2px}
 .street-num{width:27px;height:27px;border-radius:9px;background:var(--cream);display:grid;place-items:center;font-size:9px;font-weight:850;color:var(--azure)}
 .street-copy h3{font-family:'Manrope',sans-serif;font-size:14px;line-height:1.15;margin:1px 0 4px}
-.street-copy p{font-size:11px;line-height:1.45;margin:0}
+.street-copy p{font-size:11px;line-height:1.45;margin:5px 0 0}
+.street-facts{font-size:9px;line-height:1.35;font-weight:800;color:var(--azure);margin:1px 0 2px}
+.street-access{font-size:9px;line-height:1.35;color:var(--muted);margin:0}
 .street-map-btn{background:var(--cream);color:var(--azure);border:1px solid var(--line);padding:7px 9px}
+.street-popup{font-size:11px;line-height:1.35;min-width:170px}
+.street-popup b{display:block;margin-bottom:4px}
+.street-popup-facts{font-size:10px;color:#1f5f8b;margin-bottom:2px}
+.street-popup-access{font-size:10px;color:#6b7780;margin-bottom:6px}
+.street-popup a{display:inline-block;margin-top:4px;font-weight:800;text-decoration:none}
 @media(max-width:520px){
   .street-cluster-head{display:block}
   .cluster-map-btn{display:inline-flex;margin-top:9px}
+  .street-cluster-map{height:235px}
   .street-item{grid-template-columns:28px minmax(0,1fr)}
   .street-map-btn{grid-column:2;justify-self:start;margin-top:-2px}
 }
