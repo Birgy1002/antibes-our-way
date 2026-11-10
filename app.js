@@ -165,7 +165,8 @@ async function renderPlanOverviewMap(plan){
   const points=planOverviewPoints(plan);
   const coords=[];
   for(const point of points){
-    const latlng=await geocodeAddress(point.address,point.title);
+    const loc=await geocodeAddress(point.address,point.title);
+    const latlng=loc?.coords||null;
     if(latlng)coords.push({...point,latlng});
   }
   if(coords.length===0){el.innerHTML='<div class="plan-map-fallback">Map preview unavailable for this plan.</div>';return}
@@ -447,12 +448,12 @@ function planSpecialsHTML(plan){
 }
 function planClustersHTML(plan){
   return (plan.clusters||[]).map((cluster,ci)=>`<section class="detail-section street-cluster">
-    <div class="street-cluster-head"><div><p class="eyebrow">${cluster.meta||''}</p><h2>${cluster.title}</h2></div>${clusterRouteButtons(cluster,plan.mode)}</div>
+    <div class="street-cluster-head"><div><p class="eyebrow">${cluster.meta||''}</p><h2>${cluster.title}</h2></div><div data-street-routes>${clusterRouteButtons(cluster,cluster.mode||plan.mode,ci)}</div></div>
     <p class="street-cluster-note">${cluster.note||''}</p>
     ${cluster.hunt?`<p class="street-hunt">${cluster.hunt}</p>`:''}
     <div id="streetClusterMap-${ci}" class="street-cluster-map"></div>
-    <div class="street-map-caption">Orientierungskarte · Nummern entsprechen der Liste. Marker antippen für Werkinfos und Google Maps. Die Straßenroute öffnen die Buttons A, B und C.</div>
-    <div class="street-list">${(cluster.items||[]).map((item,i)=>`<div class="street-item"><div class="street-num">${i+1}</div><div class="street-copy"><h3>${item.title}</h3>${item.facts?`<div class="street-facts">${item.facts}</div>`:''}${item.description?`<p class="street-description">${item.description}</p>`:''}${item.access?`<div class="street-access">${item.access}</div>`:''}</div><div class="street-links"><button type="button" class="street-focus-btn" data-street-focus="${ci}:${i}">Auf Karte</button>${item.address?`<a class="street-map-btn" href="${itemMapUrl(item,cluster.mode||plan.mode)}" ${mapLinkAttrs()}>Maps ↗</a>`:''}</div></div>`).join('')}</div>
+    <div class="street-map-caption">Orientierungskarte · Marker anklicken für Werk und Google Maps. Näherungspositionen sind markiert.</div><p class="street-route-status" data-street-status>Standorte werden geprüft. Die Google-Maps-Routen erscheinen nach der Sortierung.</p><div class="street-map-warning-inline" data-street-warning></div>
+    <div class="street-list" data-street-list>${streetListHTML(cluster,ci)}</div>
   </section>`).join('');
 }
 function openPlan(id,push=true){
