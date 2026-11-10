@@ -300,3 +300,19 @@ main{max-width:980px;margin:0 auto;padding:78px 14px calc(96px + var(--safe))}
 .street-popup-description{font-size:11px;line-height:1.45;margin:5px 0 6px;color:#334155}
 .street-popup-work a{display:inline-flex;min-height:26px;align-items:center}
 @media(max-width:520px){.street-links{grid-column:2;justify-content:flex-start;margin-top:1px}.street-focus-btn{font-size:11px}.street-map-btn{grid-column:auto;margin-top:0}}
+
+
+/* Street Art v3.0: verified ordering and geocoding feedback */
+.street-route-ready{display:flex;flex-wrap:wrap;gap:7px;align-items:center;justify-content:flex-end}
+.street-route-loading,.street-route-caveat{display:block;font-size:10px;line-height:1.4;color:var(--muted)}
+.street-route-caveat{width:100%;max-width:290px}
+.street-route-status{font-size:10px;color:var(--muted);line-height:1.45;margin:6px 2px 9px}
+.street-map-warning-inline:not(:empty){background:#fff6e5;border:1px solid #ead9b8;border-radius:9px;color:#8a6a24;font-size:10px;line-height:1.4;padding:7px 9px;margin:6px 2px 10px}
+.street-location-approx,.street-location-missing{display:inline-block;font-size:10px;line-height:1.4;margin-top:5px;font-weight:700;color:#80622a}
+.street-location-missing{color:#a14d2d}
+.street-marker-approx{border-style:dashed;background:#f2c849;color:#183c52;border-color:#183c52}
+.street-popup small{display:block;color:#85601e;font-weight:700;font-size:10px;margin-bottom:8px}
+@media(max-width:520px){
+  .street-route-ready{justify-content:flex-start;margin:9px 0 4px}
+  .street-route-caveat{max-width:none}
+}
