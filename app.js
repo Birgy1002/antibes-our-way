@@ -167,44 +167,74 @@ function clearStreetClusterMaps(){
   streetClusterMaps.forEach(m=>{try{m.remove()}catch(e){}});
   streetClusterMaps=[];
 }
-function clusterDirections(cluster,defaultMode='walking'){
-  const mode=cluster.mode||defaultMode;
-  const points=(cluster.items||[]).filter(i=>i.address).map((i,index)=>({address:i.address,index}));
-  const compact=compressRoutePoints(points,5);
-  if(!compact.length)return '#';
-  if(compact.length===1)return directions(compact[0].address,mode);
-  return googleDirectionsUrl({origin:compact[0].address,destination:compact[compact.length-1].address,waypoints:compact.slice(1,-1).map(x=>x.address),mode});
+function itemMapUrl(item,mode='walking'){
+  return item.mapUrl||directions(item.address,mode);
 }
-function clusterMapItems(cluster,maxPoints=7){
-  const all=(cluster.items||[]).map((item,index)=>({item,index,address:item.address})).filter(x=>x.address);
-  if(all.length<=maxPoints)return all;
-  const picked=[all[0]];
-  const interior=all.slice(1,-1);
-  for(let i=0;i<maxPoints-2;i++){
-    const idx=Math.round((i+1)*(interior.length+1)/(maxPoints-1))-1;
-    const p=interior[Math.max(0,Math.min(interior.length-1,idx))];
-    if(p&&!picked.includes(p))picked.push(p);
+function uniqueClusterStops(cluster){
+  const byAddress=new Map();
+  (cluster.items||[]).forEach((item,index)=>{
+    if(!item.address)return;
+    const key=item.address.trim().toLowerCase();
+    if(!byAddress.has(key))byAddress.set(key,{address:item.address,items:[{item,index}]});
+    else byAddress.get(key).items.push({item,index});
+  });
+  return [...byAddress.values()];
+}
+function routeChunks(cluster,maxStops=5){
+  const stops=uniqueClusterStops(cluster);
+  if(stops.length<=maxStops)return stops.length?[stops]:[];
+  const chunks=[];
+  let start=0;
+  while(start<stops.length-1){
+    const chunk=stops.slice(start,Math.min(stops.length,start+maxStops));
+    if(chunk.length<2)break;
+    chunks.push(chunk);
+    start+=maxStops-1;
   }
-  picked.push(all[all.length-1]);
-  return picked;
+  return chunks;
 }
-function streetPopup(item,index,mode){
-  const facts=item.facts?'<div class="street-popup-facts">'+item.facts+'</div>':'';
-  const access=item.access?'<div class="street-popup-access">'+item.access+'</div>':'';
-  const maps=item.address?'<a href="'+directions(item.address,mode)+'" '+mapLinkAttrs()+'>Google Maps ↗</a>':'';
-  return '<div class="street-popup"><b>'+(index+1)+'. '+item.title+'</b>'+facts+access+maps+'</div>';
+function chunkRouteUrl(chunk,mode){
+  if(chunk.length===1)return directions(chunk[0].address,mode);
+  return googleDirectionsUrl({
+    origin:chunk[0].address,
+    destination:chunk[chunk.length-1].address,
+    waypoints:chunk.slice(1,-1).map(x=>x.address),
+    mode
+  });
+}
+function clusterRouteButtons(cluster,defaultMode='walking'){
+  const mode=cluster.mode||defaultMode;
+  const chunks=routeChunks(cluster,5);
+  if(!chunks.length)return '';
+  if(chunks.length===1){
+    const url=chunkRouteUrl(chunks[0],mode);
+    return '<a class="cluster-map-btn" href="'+url+'" '+mapLinkAttrs()+'>'+(chunks[0].length===1?'Open in Google Maps ↗':'Route in Google Maps ↗')+'</a>';
+  }
+  return '<div class="cluster-route-group">'+chunks.map((chunk,i)=>'<a class="cluster-map-btn" href="'+chunkRouteUrl(chunk,mode)+'" '+mapLinkAttrs()+'>Route '+String.fromCharCode(65+i)+' ↗</a>').join('')+'</div>';
+}
+function streetPopupGroup(group,mode){
+  const rows=group.items.map(({item,index})=>{
+    const facts=item.facts?'<div class="street-popup-facts">'+item.facts+'</div>':'';
+    const access=item.access?'<div class="street-popup-access">'+item.access+'</div>':'';
+    return '<div class="street-popup-work"><b>'+(index+1)+'. '+item.title+'</b>'+facts+access+'</div>';
+  }).join('');
+  const first=group.items[0].item;
+  const maps='<a href="'+itemMapUrl(first,mode)+'" '+mapLinkAttrs()+'>Google Maps ↗</a>';
+  return '<div class="street-popup">'+rows+maps+'</div>';
 }
 async function renderStreetClusterMap(plan,cluster,ci){
   const el=document.getElementById('streetClusterMap-'+ci);
   if(!el||typeof L==='undefined')return;
   el.innerHTML='<div class="plan-map-loading">Karte wird geladen…</div>';
-  const points=clusterMapItems(cluster,7);
-  if(!points.length){el.innerHTML='<div class="plan-map-fallback">Für diesen Cluster gibt es keinen Kartenpunkt.</div>';return}
+  const groups=uniqueClusterStops(cluster);
+  if(!groups.length){el.innerHTML='<div class="plan-map-fallback">Für diesen Cluster gibt es keinen festen Kartenpunkt.</div>';return}
   let map=null;
   const latlngs=[];
-  for(const point of points){
-    const latlng=await geocodeAddress(point.address,point.item.title);
-    if(!latlng)continue;
+  let missing=0;
+  for(const group of groups){
+    const title=group.items.map(x=>x.item.title).join(' / ');
+    const latlng=await geocodeAddress(group.address,title);
+    if(!latlng){missing++;continue}
     if(!map){
       el.innerHTML='';
       map=L.map(el,{zoomControl:true,dragging:true,scrollWheelZoom:false,doubleClickZoom:true,boxZoom:false,keyboard:false,tap:true,touchZoom:true,attributionControl:true});
@@ -212,31 +242,39 @@ async function renderStreetClusterMap(plan,cluster,ci){
       streetClusterMaps.push(map);
     }
     latlngs.push(latlng);
-    const icon=L.divIcon({className:'',html:'<div class="plan-marker">'+(point.index+1)+'</div>',iconSize:[34,34],iconAnchor:[17,17]});
-    L.marker(latlng,{icon}).addTo(map).bindPopup(streetPopup(point.item,point.index,cluster.mode||plan.mode));
+    const nums=group.items.map(x=>x.index+1).join('/');
+    const icon=L.divIcon({className:'',html:'<div class="plan-marker">'+nums+'</div>',iconSize:[Math.max(34,Math.min(64,22+nums.length*5)),34],iconAnchor:[17,17]});
+    L.marker(latlng,{icon}).addTo(map).bindPopup(streetPopupGroup(group,cluster.mode||plan.mode));
     if(latlngs.length===1)map.setView(latlng,15);
     else map.fitBounds(L.latLngBounds(latlngs).pad(.12),{maxZoom:16});
     setTimeout(()=>map.invalidateSize(),0);
   }
-  if(!map)el.innerHTML='<div class="plan-map-fallback">Kartenpunkte konnten nicht geladen werden. Die Google-Maps-Links funktionieren trotzdem.</div>';
+  if(!map){el.innerHTML='<div class="plan-map-fallback">Kartenpunkte konnten nicht geladen werden. Die Google-Maps-Links funktionieren trotzdem.</div>';return}
+  if(missing){
+    const msg=document.createElement('div');
+    msg.className='street-map-warning';
+    msg.textContent=missing+' Standort'+(missing===1?'':'e')+' konnte'+(missing===1?'':'n')+' nicht automatisch auf der Leaflet-Karte gesetzt werden; der Eintrag und Google-Maps-Link bleiben unten erhalten.';
+    el.parentElement.insertBefore(msg,el.nextSibling);
+  }
 }
 async function renderStreetClusterMaps(plan){
   clearStreetClusterMaps();
-  for(let ci=0;ci<(plan.clusters||[]).length;ci++){
-    await renderStreetClusterMap(plan,plan.clusters[ci],ci);
-  }
+  for(let ci=0;ci<(plan.clusters||[]).length;ci++)await renderStreetClusterMap(plan,plan.clusters[ci],ci);
+}
+function planSpecialsHTML(plan){
+  if(!plan.specials?.length)return '';
+  return '<section class="detail-section street-specials"><p class="eyebrow">OHNE FESTEN PIN</p><h2>Besondere Fälle</h2>'+
+    plan.specials.map(x=>'<div class="street-special"><h3>'+x.title+'</h3>'+(x.facts?'<div class="street-facts">'+x.facts+'</div>':'')+'<p>'+x.note+'</p></div>').join('')+
+    '</section>';
 }
 function planClustersHTML(plan){
-  return (plan.clusters||[]).map((cluster,ci)=>{
-    const route=clusterDirections(cluster,plan.mode);
-    return `<section class="detail-section street-cluster">
-      <div class="street-cluster-head"><div><p class="eyebrow">${cluster.meta||''}</p><h2>${cluster.title}</h2></div>${route!=='#'?`<a class="cluster-map-btn" href="${route}" ${mapLinkAttrs()}>Route in Google Maps ↗</a>`:''}</div>
-      <p class="street-cluster-note">${cluster.note||''}</p>
-      <div id="streetClusterMap-${ci}" class="street-cluster-map"></div>
-      <div class="street-map-caption">Orientierungskarte · Marker antippen für Werk + Google Maps. Bei großen Clustern zeigt die Karte repräsentative Punkte.</div>
-      <div class="street-list">${(cluster.items||[]).map((item,i)=>`<div class="street-item"><div class="street-num">${i+1}</div><div class="street-copy"><h3>${item.title}</h3>${item.facts?`<div class="street-facts">${item.facts}</div>`:''}${item.access?`<div class="street-access">${item.access}</div>`:''}<p>${item.note||''}</p></div>${item.address?`<a class="street-map-btn" href="${directions(item.address,cluster.mode||plan.mode)}" ${mapLinkAttrs()}>Maps ↗</a>`:''}</div>`).join('')}</div>
-    </section>`;
-  }).join('');
+  return (plan.clusters||[]).map((cluster,ci)=>`<section class="detail-section street-cluster">
+    <div class="street-cluster-head"><div><p class="eyebrow">${cluster.meta||''}</p><h2>${cluster.title}</h2></div>${clusterRouteButtons(cluster,plan.mode)}</div>
+    <p class="street-cluster-note">${cluster.note||''}</p>
+    <div id="streetClusterMap-${ci}" class="street-cluster-map"></div>
+    <div class="street-map-caption">Orientierungskarte · alle automatisch platzierbaren Standorte · Marker antippen für Werk + Google Maps.</div>
+    <div class="street-list">${(cluster.items||[]).map((item,i)=>`<div class="street-item"><div class="street-num">${i+1}</div><div class="street-copy"><h3>${item.title}</h3>${item.facts?`<div class="street-facts">${item.facts}</div>`:''}${item.access?`<div class="street-access">${item.access}</div>`:''}</div>${item.address?`<a class="street-map-btn" href="${itemMapUrl(item,cluster.mode||plan.mode)}" ${mapLinkAttrs()}>Maps ↗</a>`:''}</div>`).join('')}</div>
+  </section>`).join('');
 }
 function openPlan(id,push=true){
   clearStreetClusterMaps();
@@ -245,7 +283,7 @@ function openPlan(id,push=true){
   state.returnTarget={type:'view',view:'plans'};state.activeDetail={type:'plan',id};$('#detailContext').textContent='PLANS';
   const steps=(x.stops||[]).map(stopData).filter(Boolean);
   const clustered=Array.isArray(x.clusters)&&x.clusters.length>0;
-  $('#detailBody').innerHTML=`<div class="detail-hero plan"><p class="eyebrow">${x.meta.join(' · ')}</p><h1>${x.title}</h1><p>${x.subtitle}</p></div>${x.timing?`<section class="detail-section timing-box"><p class="eyebrow">BEST DAY / WATCH OUT</p><p>${x.timing}</p></section>`:''}<section class="detail-section"><h2>Why this works</h2><p>${x.intro}</p>${x.source?`<a class="source-link" href="${x.source}" target="_blank" rel="noopener">${x.sourceLabel||'Source walk'} ↗</a>`:''}</section>${clustered?planClustersHTML(x):`<section class="detail-section plan-map-section"><h2>Route overview</h2><p class="plan-map-copy">All mappable stops at a glance. Numbers match the stop list; lighter markers are optional. Google Maps below still uses the simpler core route.</p><div id="planOverviewMap" class="plan-overview-map"></div></section><section class="detail-section"><h2>Stop by stop</h2>${steps.map((s,i)=>`<div class="step ${s.optional?'optional-step':''}"><div class="step-num">${i+1}</div><div><h3>${s.title}${s.optional?` <span class="optional-label">OPTIONAL</span>`:''}</h3><p>${s.desc}</p>${s.type==='place'?`<button data-open-place="${s.id}">Details</button>`:s.type==='food'?`<button data-open-food="${s.id}">Details</button>`:''}</div></div>`).join('')}</section>`}<section class="detail-section"><div class="actions">${clustered?'':`<a class="action primary" href="${planDirections(x)}" ${mapLinkAttrs()}>Open route ↗</a>`}<button class="action" data-view="plans">All plans</button></div></section>`;
+  $('#detailBody').innerHTML=`<div class="detail-hero plan"><p class="eyebrow">${x.meta.join(' · ')}</p><h1>${x.title}</h1><p>${x.subtitle}</p></div>${x.timing?`<section class="detail-section timing-box"><p class="eyebrow">BEST DAY / WATCH OUT</p><p>${x.timing}</p></section>`:''}<section class="detail-section"><h2>Why this works</h2><p>${x.intro}</p>${x.source?`<a class="source-link" href="${x.source}" target="_blank" rel="noopener">${x.sourceLabel||'Source walk'} ↗</a>`:''}</section>${clustered?planSpecialsHTML(x)+planClustersHTML(x):`<section class="detail-section plan-map-section"><h2>Route overview</h2><p class="plan-map-copy">All mappable stops at a glance. Numbers match the stop list; lighter markers are optional. Google Maps below still uses the simpler core route.</p><div id="planOverviewMap" class="plan-overview-map"></div></section><section class="detail-section"><h2>Stop by stop</h2>${steps.map((s,i)=>`<div class="step ${s.optional?'optional-step':''}"><div class="step-num">${i+1}</div><div><h3>${s.title}${s.optional?` <span class="optional-label">OPTIONAL</span>`:''}</h3><p>${s.desc}</p>${s.type==='place'?`<button data-open-place="${s.id}">Details</button>`:s.type==='food'?`<button data-open-food="${s.id}">Details</button>`:''}</div></div>`).join('')}</section>`}<section class="detail-section"><div class="actions">${clustered?'':`<a class="action primary" href="${planDirections(x)}" ${mapLinkAttrs()}>Open route ↗</a>`}<button class="action" data-view="plans">All plans</button></div></section>`;
   showView('detail',push);
   if(clustered)setTimeout(()=>renderStreetClusterMaps(x),40);else setTimeout(()=>renderPlanOverviewMap(x),40);
 }
@@ -258,6 +296,6 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations().then(regs=>Promise.all(regs.map(r=>r.unregister()))).catch(()=>{});
     if('caches' in window)caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('antibes-our-way-')).map(k=>caches.delete(k)))).catch(()=>{});
   }else{
-    navigator.serviceWorker.register('./service-worker.js?v=2.6',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
+    navigator.serviceWorker.register('./service-worker.js?v=2.7',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
   }
 }
