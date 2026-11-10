@@ -77,6 +77,7 @@ function planDirections(plan){
 const ANTIBES_BOUNDS={south:43.52,north:43.68,west:7.00,east:7.23};
 const geocodePending=new Map();
 let nominatimLastRequest=0;
+let nominatimQueue=Promise.resolve();
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
 function validAntibesLocation(lat,lon){
   return Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=ANTIBES_BOUNDS.south&&lat<=ANTIBES_BOUNDS.north&&lon>=ANTIBES_BOUNDS.west&&lon<=ANTIBES_BOUNDS.east;
@@ -125,20 +126,25 @@ async function ignGeocode(address){
   return null;
 }
 async function osmGeocode(address){
-  const wait=Math.max(0,1150-(Date.now()-nominatimLastRequest));
-  if(wait)await sleep(wait);
-  nominatimLastRequest=Date.now();
-  try{
-    const q=streetSearchText(address);
-    const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=3&countrycodes=fr&viewbox=7.0%2C43.68%2C7.23%2C43.52&bounded=1&q='+encodeURIComponent(q);
-    const data=await fetchGeocodeJson(url,6500);
-    const item=(data||[]).find(p=>{
-      const lat=Number(p.lat),lon=Number(p.lon);
-      const name=String(p.display_name||'').toLowerCase();
-      return validAntibesLocation(lat,lon)&&(name.includes('antibes')||String(p.address?.city||'').toLowerCase().includes('antibes'));
-    });
-    return item?{coords:[Number(item.lat),Number(item.lon)],approx:!(/^\d+\s/.test(q))||!['house','building'].includes(String(item.type).toLowerCase()),source:'OpenStreetMap',label:item.display_name}:null;
-  }catch(err){return null}
+  // One request at a time for Nominatim public API usage policy.
+  const next=nominatimQueue.catch(()=>{}).then(async()=>{
+    const wait=Math.max(0,1150-(Date.now()-nominatimLastRequest));
+    if(wait)await sleep(wait);
+    nominatimLastRequest=Date.now();
+    try{
+      const q=streetSearchText(address);
+      const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=3&countrycodes=fr&viewbox=7.0%2C43.68%2C7.23%2C43.52&bounded=1&q='+encodeURIComponent(q);
+      const data=await fetchGeocodeJson(url,6500);
+      const item=(data||[]).find(p=>{
+        const lat=Number(p.lat),lon=Number(p.lon);
+        const name=String(p.display_name||'').toLowerCase();
+        return validAntibesLocation(lat,lon)&&(name.includes('antibes')||String(p.address?.city||'').toLowerCase().includes('antibes'));
+      });
+      return item?{coords:[Number(item.lat),Number(item.lon)],approx:!(/^\d+\s/.test(q))||!['house','building'].includes(String(item.type).toLowerCase()),source:'OpenStreetMap',label:item.display_name}:null;
+    }catch(err){return null}
+  });
+  nominatimQueue=next.then(()=>{},()=>{});
+  return next;
 }
 async function geocodeAddress(address,title=''){
   if(!address)return null;
@@ -378,6 +384,7 @@ async function renderStreetClusterMap(plan,cluster,ci,generation){
     const specified=group.items.find(x=>Array.isArray(x.item.coords)&&x.item.coords.length===2)?.item.coords;
     const manual=specified&&validAntibesLocation(...specified)?{coords:specified,approx:true,source:'hinterlegte Näherungsposition'}:null;
     group.geo=manual || await geocodeAddress(group.address);
+    if(group.geo&&group.items.length>1)group.geo={...group.geo,approx:true};
     return group;
   }));
   if(generation!==streetMapGeneration||!el.isConnected)return;
