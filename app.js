@@ -163,7 +163,26 @@ function openPlace(id){const x=pMap[id];if(!x)return;setReturn('explore');state.
 function openFood(id){const x=gMap[id];if(!x)return;setReturn('food');state.activeDetail={type:'food',id};$('#detailContext').textContent='EAT & DRINK';$('#detailBody').innerHTML=`<div class="detail-hero food"><p class="eyebrow">${x.area} · ${x.kind.toUpperCase()}</p><h1>${x.title}</h1><p>${x.best}</p></div><section class="detail-section"><h2>Our take</h2><p>${x.take}</p><div class="tags">${x.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div><div class="outdoor">${outdoorLabel[x.outdoor]||''}</div></section><section class="detail-section"><h2>Status</h2>${statusHTML('food',id)}</section><section class="detail-section"><div class="actions"><a class="action primary" href="${directions(x.address)}" ${mapLinkAttrs()}>Directions</a>${x.website?`<a class="action" href="${x.website}" target="_blank" rel="noopener">Website ↗</a>`:''}</div></section>`;showView('detail')}
 function stopData(s){if(s.place){const x=pMap[s.place];return x?{title:x.title,desc:x.short,type:'place',id:x.id,optional:!!s.optional}:null}if(s.food){const x=gMap[s.food];return x?{title:x.title,desc:x.best,type:'food',id:x.id,optional:!!s.optional}:null}if(s.label)return {title:s.label,desc:s.note||'',type:'note',optional:!!s.optional};return null}
 let streetClusterMaps=[];
+let streetMapGeneration=0;
+const streetClusterFocus=new Map();
+// The list works as a secondary control for Leaflet markers. If a pin is unavailable,
+// the same interaction opens the existing Google Maps destination instead.
+document.addEventListener('click',e=>{
+  const btn=e.target.closest('[data-street-focus]');
+  if(!btn)return;
+  const focus=streetClusterFocus.get(btn.dataset.streetFocus);
+  if(focus){
+    focus.map.flyTo(focus.marker.getLatLng(),Math.max(focus.map.getZoom(),17));
+    focus.marker.openPopup();
+    focus.map.getContainer().scrollIntoView({behavior:'smooth',block:'center'});
+  }else{
+    const link=btn.closest('.street-item')?.querySelector('.street-map-btn');
+    if(link)link.click();
+  }
+});
 function clearStreetClusterMaps(){
+  streetMapGeneration++;
+  streetClusterFocus.clear();
   streetClusterMaps.forEach(m=>{try{m.remove()}catch(e){}});
   streetClusterMaps=[];
 }
@@ -215,14 +234,14 @@ function clusterRouteButtons(cluster,defaultMode='walking'){
 function streetPopupGroup(group,mode){
   const rows=group.items.map(({item,index})=>{
     const facts=item.facts?'<div class="street-popup-facts">'+item.facts+'</div>':'';
+    const desc=item.description?'<div class="street-popup-description">'+item.description+'</div>':'';
     const access=item.access?'<div class="street-popup-access">'+item.access+'</div>':'';
-    return '<div class="street-popup-work"><b>'+(index+1)+'. '+item.title+'</b>'+facts+access+'</div>';
+    const maps=item.address?'<a href="'+itemMapUrl(item,mode)+'" '+mapLinkAttrs()+'>Google Maps ↗</a>':'';
+    return '<div class="street-popup-work"><b>'+(index+1)+'. '+item.title+'</b>'+facts+desc+access+maps+'</div>';
   }).join('');
-  const first=group.items[0].item;
-  const maps='<a href="'+itemMapUrl(first,mode)+'" '+mapLinkAttrs()+'>Google Maps ↗</a>';
-  return '<div class="street-popup">'+rows+maps+'</div>';
+  return '<div class="street-popup">'+rows+'</div>';
 }
-async function renderStreetClusterMap(plan,cluster,ci){
+async function renderStreetClusterMap(plan,cluster,ci,generation){
   const el=document.getElementById('streetClusterMap-'+ci);
   if(!el||typeof L==='undefined')return;
   el.innerHTML='<div class="plan-map-loading">Karte wird geladen…</div>';
@@ -233,7 +252,8 @@ async function renderStreetClusterMap(plan,cluster,ci){
   let missing=0;
   for(const group of groups){
     const title=group.items.map(x=>x.item.title).join(' / ');
-    const latlng=await geocodeAddress(group.address,title);
+    const latlng=group.items.find(x=>Array.isArray(x.item.coords))?.item.coords || await geocodeAddress(group.address,title);
+    if(generation!==streetMapGeneration||!el.isConnected)return;
     if(!latlng){missing++;continue}
     if(!map){
       el.innerHTML='';
@@ -243,8 +263,10 @@ async function renderStreetClusterMap(plan,cluster,ci){
     }
     latlngs.push(latlng);
     const nums=group.items.map(x=>x.index+1).join('/');
-    const icon=L.divIcon({className:'',html:'<div class="plan-marker">'+nums+'</div>',iconSize:[Math.max(34,Math.min(64,22+nums.length*5)),34],iconAnchor:[17,17]});
-    L.marker(latlng,{icon}).addTo(map).bindPopup(streetPopupGroup(group,cluster.mode||plan.mode));
+    const markerWidth=Math.max(34,Math.min(64,22+nums.length*5));
+    const icon=L.divIcon({className:'',html:'<div class="plan-marker">'+nums+'</div>',iconSize:[markerWidth,34],iconAnchor:[markerWidth/2,17]});
+    const marker=L.marker(latlng,{icon}).addTo(map).bindPopup(streetPopupGroup(group,cluster.mode||plan.mode));
+    group.items.forEach(({index})=>streetClusterFocus.set(ci+':'+index,{map,marker}));
     if(latlngs.length===1)map.setView(latlng,15);
     else map.fitBounds(L.latLngBounds(latlngs).pad(.12),{maxZoom:16});
     setTimeout(()=>map.invalidateSize(),0);
@@ -259,7 +281,11 @@ async function renderStreetClusterMap(plan,cluster,ci){
 }
 async function renderStreetClusterMaps(plan){
   clearStreetClusterMaps();
-  for(let ci=0;ci<(plan.clusters||[]).length;ci++)await renderStreetClusterMap(plan,plan.clusters[ci],ci);
+  const generation=streetMapGeneration;
+  for(let ci=0;ci<(plan.clusters||[]).length;ci++){
+    if(generation!==streetMapGeneration)break;
+    await renderStreetClusterMap(plan,plan.clusters[ci],ci,generation);
+  }
 }
 function planSpecialsHTML(plan){
   if(!plan.specials?.length)return '';
@@ -271,9 +297,10 @@ function planClustersHTML(plan){
   return (plan.clusters||[]).map((cluster,ci)=>`<section class="detail-section street-cluster">
     <div class="street-cluster-head"><div><p class="eyebrow">${cluster.meta||''}</p><h2>${cluster.title}</h2></div>${clusterRouteButtons(cluster,plan.mode)}</div>
     <p class="street-cluster-note">${cluster.note||''}</p>
+    ${cluster.hunt?`<p class="street-hunt">${cluster.hunt}</p>`:''}
     <div id="streetClusterMap-${ci}" class="street-cluster-map"></div>
-    <div class="street-map-caption">Orientierungskarte · alle automatisch platzierbaren Standorte · Marker antippen für Werk + Google Maps.</div>
-    <div class="street-list">${(cluster.items||[]).map((item,i)=>`<div class="street-item"><div class="street-num">${i+1}</div><div class="street-copy"><h3>${item.title}</h3>${item.facts?`<div class="street-facts">${item.facts}</div>`:''}${item.access?`<div class="street-access">${item.access}</div>`:''}</div>${item.address?`<a class="street-map-btn" href="${itemMapUrl(item,cluster.mode||plan.mode)}" ${mapLinkAttrs()}>Maps ↗</a>`:''}</div>`).join('')}</div>
+    <div class="street-map-caption">Orientierungskarte · Nummern entsprechen der Liste. Marker antippen für Werkinfos und Google Maps. Die Straßenroute öffnen die Buttons A, B und C.</div>
+    <div class="street-list">${(cluster.items||[]).map((item,i)=>`<div class="street-item"><div class="street-num">${i+1}</div><div class="street-copy"><h3>${item.title}</h3>${item.facts?`<div class="street-facts">${item.facts}</div>`:''}${item.description?`<p class="street-description">${item.description}</p>`:''}${item.access?`<div class="street-access">${item.access}</div>`:''}</div><div class="street-links"><button type="button" class="street-focus-btn" data-street-focus="${ci}:${i}">Auf Karte</button>${item.address?`<a class="street-map-btn" href="${itemMapUrl(item,cluster.mode||plan.mode)}" ${mapLinkAttrs()}>Maps ↗</a>`:''}</div></div>`).join('')}</div>
   </section>`).join('');
 }
 function openPlan(id,push=true){
