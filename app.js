@@ -70,29 +70,91 @@ function planDirections(plan){
   if(points.length<2)return points[0]?directions(points[0].address,mode):'#';
   return googleDirectionsUrl({origin:points[0].address,destination:points[points.length-1].address,waypoints:points.slice(1,-1).map(x=>x.address),mode});
 }
-let geocodeLastRequest=0;
-function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
-async function geocodeFetch(query){
-  const wait=Math.max(0,1050-(Date.now()-geocodeLastRequest));
+
+/* French address geocoding: official IGN/BAN first, OSM only as a fallback.
+   Search results are checked against Antibes' geographic extent. Never use an
+   artwork's name as a substitute for its street address. */
+const ANTIBES_BOUNDS={south:43.52,north:43.68,west:7.00,east:7.23};
+const geocodePending=new Map();
+let nominatimLastRequest=0;
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+function validAntibesLocation(lat,lon){
+  return Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=ANTIBES_BOUNDS.south&&lat<=ANTIBES_BOUNDS.north&&lon>=ANTIBES_BOUNDS.west&&lon<=ANTIBES_BOUNDS.east;
+}
+function streetSearchText(address){
+  const parts=address.split(',').map(s=>s.trim());
+  const street=parts.find(s=>/^(?:\d+(?:-\d+)?\s+)?(?:rue|avenue|boulevard|route|chemin|allée|allee|traverse|passage|rampe|voie|d35|rd\s?\d+|rond-point)/i.test(s));
+  return street ? street+', Antibes, France' : address;
+}
+function isApproximateAddress(address,feature){
+  const requested=streetSearchText(address);
+  const hasNumber=/^\d+(?:-\d+)?\s+/i.test(requested);
+  const type=(feature?.properties?.type||feature?.type||'').toLowerCase();
+  return !hasNumber||!['housenumber','house'].includes(type);
+}
+async function fetchGeocodeJson(url,timeout=7000){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeout);
+  try{
+    const res=await fetch(url,{signal:controller.signal,headers:{'Accept':'application/json','Accept-Language':'fr'}});
+    if(!res.ok)throw new Error('Geocoder HTTP '+res.status);
+    return await res.json();
+  }finally{clearTimeout(timer)}
+}
+async function ignGeocode(address){
+  const queries=[streetSearchText(address)];
+  if(queries[0]!==address)queries.push(address);
+  for(const q of queries){
+    try{
+      const url='https://data.geopf.fr/geocodage/search/?q='+encodeURIComponent(q)+'&limit=5&autocomplete=0';
+      const data=await fetchGeocodeJson(url);
+      const choices=(data.features||[]).map(feature=>{
+        const xy=feature.geometry?.coordinates||[];
+        const p=feature.properties||{};
+        const lat=Number(xy[1]),lon=Number(xy[0]);
+        const city=String(p.city||p.citycode||'').toLowerCase();
+        if(!validAntibesLocation(lat,lon))return null;
+        if(city && !city.includes('antibes')&&city!=='06004')return null;
+        const score=Number(p.score??0.5);
+        if(score<0.38)return null;
+        return {coords:[lat,lon],approx:isApproximateAddress(q,feature),source:'IGN/BAN',score,label:p.label||q};
+      }).filter(Boolean).sort((a,b)=>b.score-a.score);
+      if(choices.length)return choices[0];
+    }catch(err){ /* retry with a simplified address, then OSM */ }
+  }
+  return null;
+}
+async function osmGeocode(address){
+  const wait=Math.max(0,1150-(Date.now()-nominatimLastRequest));
   if(wait)await sleep(wait);
-  geocodeLastRequest=Date.now();
-  const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=fr&q=${encodeURIComponent(query)}`;
-  const res=await fetch(url,{headers:{'Accept-Language':'en'}});
-  if(!res.ok)return null;
-  const json=await res.json();
-  if(!json?.[0])return null;
-  return [parseFloat(json[0].lat),parseFloat(json[0].lon)];
+  nominatimLastRequest=Date.now();
+  try{
+    const q=streetSearchText(address);
+    const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=3&countrycodes=fr&viewbox=7.0%2C43.68%2C7.23%2C43.52&bounded=1&q='+encodeURIComponent(q);
+    const data=await fetchGeocodeJson(url,6500);
+    const item=(data||[]).find(p=>{
+      const lat=Number(p.lat),lon=Number(p.lon);
+      const name=String(p.display_name||'').toLowerCase();
+      return validAntibesLocation(lat,lon)&&(name.includes('antibes')||String(p.address?.city||'').toLowerCase().includes('antibes'));
+    });
+    return item?{coords:[Number(item.lat),Number(item.lon)],approx:!(/^\d+\s/.test(q))||!['house','building'].includes(String(item.type).toLowerCase()),source:'OpenStreetMap',label:item.display_name}:null;
+  }catch(err){return null}
 }
 async function geocodeAddress(address,title=''){
-  const key=`antibes-geocode-v2-${address}`;
-  try{const cached=localStorage.getItem(key);if(cached)return JSON.parse(cached)}catch(e){}
+  if(!address)return null;
+  const cacheKey='antibes-geocode-v3-'+address;
   try{
-    let coords=await geocodeFetch(address);
-    if(!coords && title)coords=await geocodeFetch(`${title}, Côte d'Azur, France`);
-    if(!coords)return null;
-    try{localStorage.setItem(key,JSON.stringify(coords))}catch(e){}
-    return coords;
-  }catch(err){return null}
+    const cached=JSON.parse(localStorage.getItem(cacheKey)||'null');
+    if(cached?.coords&&validAntibesLocation(...cached.coords))return cached;
+  }catch(err){}
+  if(geocodePending.has(address))return geocodePending.get(address);
+  const promise=(async()=>{
+    const result=await ignGeocode(address)||await osmGeocode(address);
+    if(result)try{localStorage.setItem(cacheKey,JSON.stringify(result))}catch(err){}
+    return result;
+  })();
+  geocodePending.set(address,promise);
+  try{return await promise}finally{geocodePending.delete(address)}
 }
 function markerGroupKey(point){return point.address.trim().toLowerCase()}
 async function renderPlanOverviewMap(plan){
