@@ -279,3 +279,14 @@ main{max-width:980px;margin:0 auto;padding:78px 14px calc(96px + var(--safe))}
   .street-item{grid-template-columns:28px minmax(0,1fr)}
   .street-map-btn{grid-column:2;justify-self:start;margin-top:-2px}
 }
+
+/* Street-art v2.7 completeness + route fixes */
+.cluster-route-group{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.street-map-warning{font-size:9px;line-height:1.4;color:#8a6a24;background:#fff8e8;border:1px solid #ead9b8;border-radius:10px;padding:7px 9px;margin:7px 0 9px}
+.street-popup-work{padding:0 0 6px;margin:0 0 6px;border-bottom:1px solid #e8e2d7}
+.street-popup-work:last-of-type{border-bottom:0;margin-bottom:2px}
+.street-specials h2{margin-bottom:8px}
+.street-special{padding:10px 0;border-top:1px solid var(--line)}
+.street-special h3{font-family:'Manrope',sans-serif;font-size:14px;margin:0 0 4px}
+.street-special p{font-size:11px;line-height:1.5;margin:4px 0 0}
+@media(max-width:520px){.cluster-route-group{justify-content:flex-start;margin-top:9px}}
