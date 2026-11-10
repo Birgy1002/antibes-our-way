@@ -1,17 +1,17 @@
-const VERSION='3.0';
+const VERSION='3.1';
 const CACHE=`antibes-our-way-v${VERSION}`;
 const APP_SHELL=[
   './',
   './index.html',
-  './style.css?v=3.0',
-  './app.js?v=3.0',
-  './data/places.js?v=3.0',
-  './data/gastro.js?v=3.0',
-  './data/plans.js?v=3.0',
-  './data/events.js?v=3.0',
-  './manifest.webmanifest?v=3.0',
-  './assets/icon-192.png?v=3.0',
-  './assets/icon-512.png?v=3.0'
+  './style.css?v=3.1',
+  './app.js?v=3.1',
+  './data/places.js?v=3.1',
+  './data/gastro.js?v=3.1',
+  './data/plans.js?v=3.1',
+  './data/events.js?v=3.1',
+  './manifest.webmanifest?v=3.1',
+  './assets/icon-192.png?v=3.1',
+  './assets/icon-512.png?v=3.1'
 ];
 
 self.addEventListener('install',event=>{
