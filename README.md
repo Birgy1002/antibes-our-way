@@ -151,3 +151,10 @@ Eat & Drink filters are now dimensional: Type (Coffee/Wine/Restaurant), Extras (
 - Mehrere Werke an einer Adresse teilen einen Marker. Adressen ohne Hausnummer, geokodierte Mehrfachstandorte und hinterlegte Näherungspositionen tragen einen Genauigkeitshinweis. Nicht lokalisierbare Einträge bleiben vollständig in der Liste und mit Einzellink zu Google Maps, werden aber nicht als falsche Pins oder Routenpunkte ausgegeben.
 - Eine geometrische Näherung ersetzt keine Fußweg-/Straßen-Routing-Engine: tatsächliche Straßenführung und Verkehrsmittel berechnet Google Maps. Die PWA lädt aktualisierte Dateien mit Version v3.1.
 - Die anderen Pläne (Nice, Monaco, Ausflüge) nutzen weiterhin eine geografisch unbeschränkte Standortsuche. Syntax- und Datentest sowie ein isolierter Routensortierungs-/Chunk-Test durchgeführt; Live-Geocoding und iPhone-Verhalten müssen im Browser geprüft werden.
+
+
+## v3.3 – TER Train Day Pass (15.11.2026)
+- Home-Karte „TER Train Day Pass“ mit eigener Detailansicht und offizieller englischer SNCF-Verlinkung.
+- Alpes-Maritimes (06): 20 € + 5 € für eine Begleitperson = 25 € zu zweit; Côte d’Azur (06 + 83): 30 € + 5 € = 35 € zu zweit.
+- Erläuterung zu Gültigkeit, Ausschlüssen und besonderer Prüfung von Monaco.
+- Versionssprung auf 3.3 für PWA-Aktualisierung.
