@@ -93,6 +93,7 @@ main{max-width:980px;margin:0 auto;padding:78px 14px calc(96px + var(--safe))}
 .home-card.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
 .home-card.peyrassol-card{background:linear-gradient(145deg,#fbf6f2,#f9f0e2);border-color:#ebddd0}
 .home-card.event-card-home{background:linear-gradient(145deg,#f4f7fb,#eef6f3)}
+.home-card.train-card{grid-column:1/-1;background:linear-gradient(145deg,#edf6fa,#f6f3e9);border-color:#cfe2eb}
 .home-icon{
   width:44px;height:44px;border-radius:15px;background:var(--azure);display:grid;place-items:center;color:#fff;font-size:18px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
